@@ -17,6 +17,7 @@ module glamin_embedder
   public :: EMBEDDER_HARDWARE_LEN
   public :: is_embedder_compatible
   public :: is_embedder_supported
+  public :: select_embedder_contract
   public :: has_embedder_signature
 
   integer, parameter :: EMBEDDER_ID_LEN = 64
@@ -110,6 +111,33 @@ contains
     has_embedder_signature = len_trim(contract%signature) > 0
   end function has_embedder_signature
 
+  function select_embedder_contract(contracts, profile, preferred_class) result(selected)
+    type(EmbedderContract), intent(in) :: contracts(:)
+    type(HardwareProfile), intent(in) :: profile
+    character(len=*), intent(in), optional :: preferred_class
+    integer(int32) :: selected
+    integer(int32) :: fallback
+    character(len=EMBEDDER_HARDWARE_LEN) :: preferred
+    integer :: idx
+
+    selected = 0
+    fallback = 0
+    preferred = 'cpu'
+    if (present(preferred_class)) preferred = normalize_hardware_class(preferred_class)
+    if (len_trim(preferred) == 0) preferred = 'cpu'
+
+    do idx = 1, size(contracts)
+      if (.not. is_embedder_supported(contracts(idx)%spec, profile)) cycle
+      if (fallback == 0) fallback = idx
+      if (hardware_class_matches(contracts(idx)%spec%hardware_class, preferred)) then
+        selected = idx
+        exit
+      end if
+    end do
+
+    if (selected == 0) selected = fallback
+  end function select_embedder_contract
+
   pure function normalize_hardware_class(value) result(normalized)
     character(len=*), intent(in) :: value
     character(len=EMBEDDER_HARDWARE_LEN) :: normalized
@@ -127,4 +155,24 @@ contains
     end do
     normalized = adjustl(normalized)
   end function normalize_hardware_class
+
+  pure logical function hardware_class_matches(actual, preferred)
+    character(len=*), intent(in) :: actual
+    character(len=*), intent(in) :: preferred
+    character(len=EMBEDDER_HARDWARE_LEN) :: actual_norm
+    character(len=EMBEDDER_HARDWARE_LEN) :: preferred_norm
+
+    actual_norm = normalize_hardware_class(actual)
+    preferred_norm = normalize_hardware_class(preferred)
+    if (len_trim(actual_norm) == 0) actual_norm = 'cpu'
+    if (len_trim(preferred_norm) == 0) preferred_norm = 'cpu'
+
+    if (trim(preferred_norm) == 'any') then
+      hardware_class_matches = .true.
+    else if (trim(actual_norm) == 'any') then
+      hardware_class_matches = .true.
+    else
+      hardware_class_matches = trim(actual_norm) == trim(preferred_norm)
+    end if
+  end function hardware_class_matches
 end module glamin_embedder

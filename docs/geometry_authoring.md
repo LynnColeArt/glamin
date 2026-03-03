@@ -49,6 +49,8 @@ editable source of truth.
 - **Hardware requirements**: embedder contracts include `hardware_class`,
   `min_ram_mb`, and `min_vram_mb` for deterministic selection against a
   hardware profile.
+- **Selection**: prefer an explicit hardware class when provided; otherwise
+  fall back to the first supported contract in the list.
 
 ---
 
