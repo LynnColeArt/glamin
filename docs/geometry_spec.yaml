@@ -1,13 +1,13 @@
-spec_version: 0.1
+spec_version: "0.1"
 spec_id: auth_flow_v1
 title: Auth Flow Geometry
-created_at: 2025-01-12T10:00:00Z
+created_at: "2025-01-12T10:00:00Z"
 owner: core_runtime
 notes: Baseline geometry for login/auth behavior.
 
 embedder:
   id: bow_hash
-  version: 0.1
+  version: "0.1"
   input_schema: mint_text_v1
   preprocess_chain:
     - lowercase

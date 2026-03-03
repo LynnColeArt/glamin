@@ -64,6 +64,38 @@ Near-term tooling targets:
 
 ---
 
+## Tooling Usage
+
+Install tooling dependencies:
+
+```
+python3 -m venv build/venv
+build/venv/bin/pip install -r tools/requirements.txt
+```
+
+Validate a spec:
+
+```
+build/venv/bin/python tools/geometry_spec_tool.py validate docs/geometry_spec.yaml
+```
+
+Compile to manifest + contracts:
+
+```
+build/venv/bin/python tools/geometry_spec_tool.py compile docs/geometry_spec.yaml --out-dir build/specs
+```
+
+Canonicalize to JSON:
+
+```
+build/venv/bin/python tools/geometry_spec_tool.py canonicalize docs/geometry_spec.yaml --output build/specs/spec.json
+```
+
+Note: quote version strings and timestamps to avoid YAML coercion.
+
+---
+
 ## Example
 
-See `docs/geometry_spec.yaml` for a complete sample.
+See `docs/geometry_spec.yaml` for a minimal sample, and
+`examples/geometry_spec_auth_flow.yaml` for a richer example.

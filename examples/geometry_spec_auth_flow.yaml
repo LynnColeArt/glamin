@@ -1,0 +1,84 @@
+spec_version: "0.1"
+spec_id: auth_flow_v1
+title: Auth Flow Geometry
+created_at: "2025-01-12T10:00:00Z"
+owner: core_runtime
+notes: Example auth flow with decision corridors and traces.
+
+embedder:
+  id: bow_hash
+  version: "0.1"
+  input_schema: mint_text_v1
+  preprocess_chain:
+    - lowercase
+    - tokenize
+    - hash64
+    - normalize:l2
+  model_hash: sha256:2d2c9e...
+  config_hash: sha256:93b4a1...
+  hardware_class: cpu
+  min_ram_mb: 128
+  min_vram_mb: 0
+
+spaces:
+  - space_id: geometry.auth
+    dim: 512
+    metric: l2
+    normalization: l2
+    transform_chain:
+      - doc_to_geometry:v1
+    invariants:
+      - type: dim
+        equals: 512
+      - type: metric
+        allowed: [l2]
+
+mints:
+  - mint_id: auth.validate
+    space_id: geometry.auth
+    text: Validate credentials, device fingerprint, and session state.
+    tags: [auth, validate]
+  - mint_id: auth.mfa_prompt
+    space_id: geometry.auth
+    text: Require multi-factor authentication due to elevated risk.
+    tags: [auth, mfa]
+  - mint_id: auth.allow
+    space_id: geometry.auth
+    text: Authorize access for valid user with low risk score.
+    tags: [auth, allow]
+  - mint_id: auth.deny
+    space_id: geometry.auth
+    text: Reject access and record audit event for anomaly detection.
+    tags: [auth, deny]
+  - mint_id: auth.lockout
+    space_id: geometry.auth
+    text: Lock account after repeated failed attempts.
+    tags: [auth, lockout]
+
+corridors:
+  - corridor_id: auth_boundary
+    space_id: geometry.auth
+    between: [auth.allow, auth.deny]
+    width: 0.08
+    risk_profile: high
+  - corridor_id: auth_mfa_boundary
+    space_id: geometry.auth
+    between: [auth.mfa_prompt, auth.allow]
+    width: 0.12
+    risk_profile: medium
+  - corridor_id: auth_lockout_boundary
+    space_id: geometry.auth
+    between: [auth.deny, auth.lockout]
+    width: 0.05
+    risk_profile: high
+
+traces:
+  - trace_id: login_happy_path
+    space_id: geometry.auth
+    steps: [auth.validate, auth.allow]
+  - trace_id: login_mfa_path
+    space_id: geometry.auth
+    steps: [auth.validate, auth.mfa_prompt, auth.allow]
+  - trace_id: login_lockout_path
+    space_id: geometry.auth
+    steps: [auth.validate, auth.deny, auth.lockout]
