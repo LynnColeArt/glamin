@@ -46,6 +46,14 @@ module glamin_async
   integer(int32), allocatable, save :: request_error(:)
   type(RequestPayload), allocatable, save :: request_payload(:)
   type(RequestContext), allocatable, target, save :: request_context(:)
+  integer(c_int32_t), parameter :: WAIT_SLEEP_MS = 1_c_int32_t
+
+  interface
+    subroutine glamin_sleep_ms(milliseconds) bind(c, name="glamin_sleep_ms")
+      import :: c_int32_t
+      integer(c_int32_t), value :: milliseconds
+    end subroutine glamin_sleep_ms
+  end interface
 
 contains
   subroutine submit_search(index, plan, queries, request_handle)
@@ -103,6 +111,7 @@ contains
   subroutine wait_request(request_handle, status)
     type(Request), intent(inout) :: request_handle
     integer(int32), intent(out) :: status
+    integer(int32) :: current_status
 
     if (.not. is_valid_request(request_handle%id)) then
       call set_request_state(request_handle, REQUEST_FAILED, GLAMIN_ERR_INVALID_ARG)
@@ -110,13 +119,16 @@ contains
       return
     end if
 
-    if (request_status(request_handle%id) == REQUEST_PENDING) then
-      request_status(request_handle%id) = REQUEST_COMPLETED
-      request_error(request_handle%id) = GLAMIN_OK
-    end if
+    do
+      current_status = request_status(request_handle%id)
+      if (current_status /= REQUEST_PENDING .and. current_status /= REQUEST_RUNNING) then
+        exit
+      end if
+      call glamin_sleep_ms(WAIT_SLEEP_MS)
+    end do
 
-    status = request_status(request_handle%id)
-    request_handle%status = status
+    status = current_status
+    request_handle%status = current_status
     request_handle%error_code = request_error(request_handle%id)
   end subroutine wait_request
 

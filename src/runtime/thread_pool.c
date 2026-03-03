@@ -1,6 +1,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define GLAMIN_OK 0
 #define GLAMIN_ERR_INVALID_ARG 2
@@ -308,4 +309,16 @@ int glamin_thread_pool_submit_request_with_job(
   }
 
   return status;
+}
+
+void glamin_sleep_ms(int32_t milliseconds) {
+  struct timespec ts;
+
+  if (milliseconds <= 0) {
+    return;
+  }
+
+  ts.tv_sec = milliseconds / 1000;
+  ts.tv_nsec = (long)(milliseconds % 1000) * 1000000L;
+  nanosleep(&ts, NULL);
 }
