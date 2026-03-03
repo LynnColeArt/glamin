@@ -61,6 +61,7 @@ Near-term tooling targets:
 - Schema validator + canonicalizer for `geometry_spec.yaml`
 - Compiler output: `manifest.json` and `contracts.json`
 - First executable example spec using mints, corridors, and traces
+- Visualizer stub that emits Graphviz DOT
 
 ---
 
@@ -89,6 +90,12 @@ Canonicalize to JSON:
 
 ```
 build/venv/bin/python tools/geometry_spec_tool.py canonicalize docs/geometry_spec.yaml --output build/specs/spec.json
+```
+
+Render a DOT graph:
+
+```
+build/venv/bin/python tools/geometry_spec_visualize.py docs/geometry_spec.yaml --output build/specs/spec.dot
 ```
 
 Note: quote version strings and timestamps to avoid YAML coercion.

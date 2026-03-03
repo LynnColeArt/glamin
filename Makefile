@@ -5,6 +5,12 @@ AR = ar
 BUILD_DIR ?= build
 OBJ_DIR ?= $(BUILD_DIR)/obj
 MOD_DIR ?= $(BUILD_DIR)/mod
+VENV_DIR ?= $(BUILD_DIR)/venv
+SPEC ?= docs/geometry_spec.yaml
+SPEC_OUT ?= $(BUILD_DIR)/specs
+SPEC_CANON ?= $(SPEC_OUT)/spec.json
+SPEC_DOT ?= $(SPEC_OUT)/spec.dot
+VENV_PY ?= $(VENV_DIR)/bin/python
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread
@@ -58,5 +64,23 @@ $(MOD_DIR):
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize
+
+spec-venv:
+	python3 -m venv $(VENV_DIR)
+	$(VENV_PY) -m pip install -r tools/requirements.txt
+
+spec-validate: spec-venv
+	$(VENV_PY) tools/geometry_spec_tool.py validate $(SPEC)
+
+spec-compile: spec-venv
+	$(VENV_PY) tools/geometry_spec_tool.py compile $(SPEC) --out-dir $(SPEC_OUT)
+
+spec-canonicalize: spec-venv
+	$(VENV_PY) tools/geometry_spec_tool.py canonicalize $(SPEC) --output $(SPEC_CANON)
+
+spec-visualize: spec-venv
+	$(VENV_PY) tools/geometry_spec_visualize.py $(SPEC) --output $(SPEC_DOT)
 
 .PHONY: all clean
