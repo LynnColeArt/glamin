@@ -12,7 +12,17 @@
     "notes": { "type": "string" },
     "embedder": {
       "type": "object",
-      "required": ["id", "version", "input_schema", "preprocess_chain", "model_hash", "config_hash"],
+      "required": [
+        "id",
+        "version",
+        "input_schema",
+        "preprocess_chain",
+        "model_hash",
+        "config_hash",
+        "hardware_class",
+        "min_ram_mb",
+        "min_vram_mb"
+      ],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "version": { "type": "string", "minLength": 1 },
@@ -24,6 +34,12 @@
         },
         "model_hash": { "type": "string", "minLength": 1 },
         "config_hash": { "type": "string", "minLength": 1 },
+        "hardware_class": {
+          "type": "string",
+          "enum": ["cpu", "gpu", "npu", "hybrid", "any"]
+        },
+        "min_ram_mb": { "type": "integer", "minimum": 0 },
+        "min_vram_mb": { "type": "integer", "minimum": 0 },
         "signature": { "type": "string" }
       },
       "additionalProperties": false

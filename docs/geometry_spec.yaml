@@ -16,6 +16,9 @@ embedder:
     - normalize:l2
   model_hash: sha256:2d2c9e...     # bag-of-words model artifact
   config_hash: sha256:93b4a1...    # hash of tokenizer + hashing config
+  hardware_class: cpu
+  min_ram_mb: 128
+  min_vram_mb: 0
 
 spaces:
   - space_id: geometry.auth

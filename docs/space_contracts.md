@@ -77,6 +77,9 @@ Embedder contract fields:
 - `preprocess_chain` — ordered preprocessing steps
 - `model_hash` — hash of embedder weights or artifact
 - `config_hash` — hash of embedder configuration
+- `hardware_class` — `cpu`, `gpu`, `npu`, or `hybrid`
+- `min_ram_mb` — minimum system memory requirement
+- `min_vram_mb` — minimum accelerator memory requirement
 - `signature` — signed attestation of the contract
 
 ---
@@ -112,6 +115,9 @@ embedder:
   preprocess_chain: [normalize:l2]
   model_hash: sha256:5a6b...
   config_hash: sha256:9f2c...
+  hardware_class: cpu
+  min_ram_mb: 128
+  min_vram_mb: 0
   signature: ed25519:ab12...
 transform_chain:
   - doc_to_geometry:v2

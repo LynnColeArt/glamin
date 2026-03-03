@@ -46,6 +46,8 @@ editable source of truth.
 - **CPU-first**: the default embedder is CPU-only for easy deployment.
 - **GPU/NPU optional**: accelerated embedders are separate contracts that opt
   into specific hardware classes when available.
+- **Hardware requirements**: embedder contracts include `hardware_class`,
+  `min_ram_mb`, and `min_vram_mb` for deterministic selection.
 
 ---
 

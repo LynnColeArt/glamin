@@ -13,6 +13,7 @@ module glamin_embedder
   public :: EMBEDDER_HASH_LEN
   public :: EMBEDDER_SIGNATURE_LEN
   public :: EMBEDDER_OWNER_LEN
+  public :: EMBEDDER_HARDWARE_LEN
   public :: is_embedder_compatible
   public :: has_embedder_signature
 
@@ -23,6 +24,7 @@ module glamin_embedder
   integer, parameter :: EMBEDDER_HASH_LEN = 128
   integer, parameter :: EMBEDDER_SIGNATURE_LEN = 256
   integer, parameter :: EMBEDDER_OWNER_LEN = 64
+  integer, parameter :: EMBEDDER_HARDWARE_LEN = 16
 
   type :: EmbedderSpec
     character(len=EMBEDDER_ID_LEN) :: embedder_id = ''
@@ -31,6 +33,9 @@ module glamin_embedder
     character(len=EMBEDDER_CHAIN_LEN) :: preprocess_chain = ''
     character(len=EMBEDDER_HASH_LEN) :: model_hash = ''
     character(len=EMBEDDER_HASH_LEN) :: config_hash = ''
+    character(len=EMBEDDER_HARDWARE_LEN) :: hardware_class = ''
+    integer(int32) :: min_ram_mb = 0
+    integer(int32) :: min_vram_mb = 0
     integer(int32) :: dim = 0
     integer(int32) :: metric = METRIC_L2
     integer(int32) :: normalization = 0
