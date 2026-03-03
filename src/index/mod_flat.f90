@@ -4,7 +4,7 @@ module glamin_index_flat
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_OOM
   use glamin_metrics, only: METRIC_L2, METRIC_IP
   use glamin_memory, only: allocate_aligned, free_aligned
-  use glamin_types, only: VectorBlock, IndexHandle
+  use glamin_types, only: VectorBlock, IndexHandle, INDEX_KIND_FLAT, INDEX_KIND_UNKNOWN
   implicit none
   private
 
@@ -42,6 +42,7 @@ contains
     integer(int32) :: alloc_status
 
     handle%impl = c_null_ptr
+    handle%kind = INDEX_KIND_FLAT
     if (dim <= 0_int32) then
       status = GLAMIN_ERR_INVALID_ARG
       return
@@ -55,6 +56,7 @@ contains
 
     call flat_create(flat_index, dim, metric)
     handle%impl = c_loc(flat_index)
+    handle%kind = INDEX_KIND_FLAT
     status = GLAMIN_OK
   end subroutine flat_create_handle
 
@@ -77,6 +79,7 @@ contains
 
     deallocate(flat_index, stat=alloc_status)
     handle%impl = c_null_ptr
+    handle%kind = INDEX_KIND_UNKNOWN
     status = GLAMIN_OK
   end subroutine flat_destroy_handle
 
@@ -119,6 +122,11 @@ contains
 
     flat_index => null()
     if (.not. c_associated(index_handle%impl)) then
+      return
+    end if
+
+    if (index_handle%kind /= INDEX_KIND_FLAT .and. &
+        index_handle%kind /= INDEX_KIND_UNKNOWN) then
       return
     end if
 

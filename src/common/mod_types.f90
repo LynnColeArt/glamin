@@ -8,6 +8,9 @@ module glamin_types
   public :: VectorBlock
   public :: SearchPlan
   public :: IndexHandle
+  public :: INDEX_KIND_UNKNOWN
+  public :: INDEX_KIND_FLAT
+  public :: INDEX_KIND_PQ
 
   type :: Request
     integer(int64) :: id = 0
@@ -32,7 +35,14 @@ module glamin_types
     integer(int32) :: metric = 0
   end type SearchPlan
 
+  enum, bind(c)
+    enumerator :: INDEX_KIND_UNKNOWN = 0
+    enumerator :: INDEX_KIND_FLAT = 1
+    enumerator :: INDEX_KIND_PQ = 2
+  end enum
+
   type :: IndexHandle
     type(c_ptr) :: impl = c_null_ptr
+    integer(int32) :: kind = INDEX_KIND_UNKNOWN
   end type IndexHandle
 end module glamin_types
