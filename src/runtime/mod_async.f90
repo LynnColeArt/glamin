@@ -1,11 +1,13 @@
 module glamin_async
   use iso_fortran_env, only: int32, int64
-  use iso_c_binding, only: c_null_ptr, c_int32_t, c_int64_t
-  use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_OOM
+  use iso_c_binding, only: c_associated, c_f_pointer, c_loc, c_null_ptr, c_ptr, c_int32_t, c_int64_t
+  use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_OOM, &
+    GLAMIN_ERR_NOT_READY
   use glamin_status, only: REQUEST_PENDING, REQUEST_RUNNING, REQUEST_COMPLETED, REQUEST_CANCELLED, &
     REQUEST_FAILED
   use glamin_types, only: Request, VectorBlock, SearchPlan, IndexHandle
-  use glamin_worker_pool, only: WorkerPool, submit_request_job
+  use glamin_index_flat, only: flat_add, flat_search
+  use glamin_worker_pool, only: WorkerPool, JobCallback, submit_request_job_with_callback
   implicit none
   private
 
@@ -16,6 +18,10 @@ module glamin_async
   public :: wait_request
   public :: cancel_request
   public :: schedule_request
+
+  type :: RequestContext
+    integer(int64) :: request_id = 0
+  end type RequestContext
 
   enum, bind(c)
     enumerator :: REQUEST_KIND_NONE = 0
@@ -36,6 +42,7 @@ module glamin_async
   integer(int32), allocatable, save :: request_status(:)
   integer(int32), allocatable, save :: request_error(:)
   type(RequestPayload), allocatable, save :: request_payload(:)
+  type(RequestContext), allocatable, target, save :: request_context(:)
 
 contains
   subroutine submit_search(index, plan, queries, request_handle)
@@ -144,7 +151,19 @@ contains
     request_status(request_handle%id) = REQUEST_RUNNING
     request_error(request_handle%id) = GLAMIN_OK
 
-    call submit_request_job(pool, request_handle%id, status)
+    call ensure_context_capacity(request_handle%id, status)
+    if (status /= GLAMIN_OK) then
+      request_status(request_handle%id) = REQUEST_FAILED
+      request_error(request_handle%id) = status
+      request_handle%status = request_status(request_handle%id)
+      request_handle%error_code = request_error(request_handle%id)
+      return
+    end if
+
+    request_context(request_handle%id)%request_id = request_handle%id
+
+    call submit_request_job_with_callback(pool, request_handle%id, execute_request_job, &
+      c_loc(request_context(request_handle%id)), status)
     if (status /= GLAMIN_OK) then
       request_status(request_handle%id) = REQUEST_FAILED
       request_error(request_handle%id) = status
@@ -214,6 +233,7 @@ contains
     integer(int32), allocatable :: new_status(:)
     integer(int32), allocatable :: new_error(:)
     type(RequestPayload), allocatable :: new_payload(:)
+    type(RequestContext), allocatable :: new_context(:)
 
     if (request_id <= 0_int64) then
       status = GLAMIN_ERR_INVALID_ARG
@@ -248,9 +268,19 @@ contains
         return
       end if
 
+      allocate(request_context(required), stat=alloc_status)
+      if (alloc_status /= 0_int32) then
+        deallocate(request_payload)
+        deallocate(request_error)
+        deallocate(request_status)
+        status = GLAMIN_ERR_OOM
+        return
+      end if
+
       request_status = REQUEST_PENDING
       request_error = GLAMIN_OK
       request_payload = RequestPayload()
+      request_context = RequestContext()
       status = GLAMIN_OK
       return
     end if
@@ -284,16 +314,28 @@ contains
       return
     end if
 
+    allocate(new_context(new_size), stat=alloc_status)
+    if (alloc_status /= 0_int32) then
+      deallocate(new_payload)
+      deallocate(new_error)
+      deallocate(new_status)
+      status = GLAMIN_ERR_OOM
+      return
+    end if
+
     new_status = REQUEST_PENDING
     new_error = GLAMIN_OK
     new_payload = RequestPayload()
+    new_context = RequestContext()
     new_status(1:current_size) = request_status
     new_error(1:current_size) = request_error
     new_payload(1:current_size) = request_payload
+    new_context(1:current_size) = request_context
 
     call move_alloc(new_status, request_status)
     call move_alloc(new_error, request_error)
     call move_alloc(new_payload, request_payload)
+    call move_alloc(new_context, request_context)
     status = GLAMIN_OK
   end subroutine ensure_capacity
 
@@ -352,4 +394,99 @@ contains
     request_payload(payload_index)%index = index
     request_payload(payload_index)%vectors = vectors
   end subroutine set_payload_vectors
+
+  subroutine ensure_context_capacity(request_id, status)
+    integer(int64), intent(in) :: request_id
+    integer(int32), intent(out) :: status
+
+    call ensure_capacity(request_id, status)
+  end subroutine ensure_context_capacity
+
+  subroutine execute_request_job(context) bind(c)
+    type(c_ptr), value :: context
+    type(RequestContext), pointer :: request_state
+
+    call c_f_pointer(context, request_state)
+    if (.not. associated(request_state)) then
+      return
+    end if
+
+    call execute_request(request_state%request_id)
+  end subroutine execute_request_job
+
+  subroutine execute_request(request_id)
+    integer(int64), intent(in) :: request_id
+    integer(int32) :: status
+
+    if (.not. is_valid_request(request_id)) then
+      return
+    end if
+
+    status = request_status(request_id)
+    if (status == REQUEST_CANCELLED) then
+      return
+    end if
+
+    select case (request_payload(request_id)%kind)
+    case (REQUEST_KIND_SEARCH)
+      call execute_search(request_id)
+    case (REQUEST_KIND_ADD)
+      call execute_add(request_id)
+    case (REQUEST_KIND_TRAIN)
+      call execute_train(request_id)
+    case default
+      call mark_request_failed(request_id, GLAMIN_ERR_INVALID_ARG)
+    end select
+  end subroutine execute_request
+
+  subroutine execute_search(request_id)
+    integer(int64), intent(in) :: request_id
+    type(SearchPlan) :: plan
+    type(VectorBlock) :: queries
+    type(IndexHandle) :: index
+    type(VectorBlock) :: distances
+    type(VectorBlock) :: labels
+
+    plan = request_payload(request_id)%plan
+    queries = request_payload(request_id)%queries
+    index = request_payload(request_id)%index
+
+    call flat_search(index, queries, plan%k, distances, labels)
+
+    request_error(request_id) = GLAMIN_OK
+  end subroutine execute_search
+
+  subroutine execute_add(request_id)
+    integer(int64), intent(in) :: request_id
+    type(VectorBlock) :: vectors
+    type(IndexHandle) :: index
+
+    vectors = request_payload(request_id)%vectors
+    index = request_payload(request_id)%index
+
+    call flat_add(index, vectors)
+
+    request_error(request_id) = GLAMIN_OK
+  end subroutine execute_add
+
+  subroutine execute_train(request_id)
+    integer(int64), intent(in) :: request_id
+    type(VectorBlock) :: vectors
+    type(IndexHandle) :: index
+
+    vectors = request_payload(request_id)%vectors
+    index = request_payload(request_id)%index
+
+    call flat_add(index, vectors)
+
+    request_error(request_id) = GLAMIN_OK
+  end subroutine execute_train
+
+  subroutine mark_request_failed(request_id, error_code)
+    integer(int64), intent(in) :: request_id
+    integer(int32), intent(in) :: error_code
+
+    request_error(request_id) = error_code
+    request_status(request_id) = REQUEST_FAILED
+  end subroutine mark_request_failed
 end module glamin_async

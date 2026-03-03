@@ -35,6 +35,8 @@ typedef struct {
 
 typedef struct {
   int64_t request_id;
+  glamin_job_fn function;
+  void *context;
 } glamin_request_context;
 
 extern void glamin_mark_request_status(int64_t request_id, int32_t status, int32_t error_code);
@@ -237,15 +239,20 @@ int glamin_thread_pool_submit(glamin_thread_pool *pool, glamin_job_fn callback, 
 
 static void glamin_complete_request_job(void *context) {
   glamin_request_context *request_context = (glamin_request_context *)context;
+  int32_t error_code = GLAMIN_OK;
 
   if (!request_context) {
     return;
   }
 
+  if (request_context->function) {
+    request_context->function(request_context->context);
+  }
+
   glamin_mark_request_status(
     request_context->request_id,
     GLAMIN_REQUEST_COMPLETED,
-    GLAMIN_OK
+    error_code
   );
   free(request_context);
 }
@@ -264,6 +271,37 @@ int glamin_thread_pool_submit_request(glamin_thread_pool *pool, int64_t request_
   }
 
   context->request_id = request_id;
+  context->function = NULL;
+  context->context = NULL;
+  status = glamin_thread_pool_submit(pool, glamin_complete_request_job, context);
+  if (status != GLAMIN_OK) {
+    free(context);
+  }
+
+  return status;
+}
+
+int glamin_thread_pool_submit_request_with_job(
+  glamin_thread_pool *pool,
+  int64_t request_id,
+  glamin_job_fn callback,
+  void *context_ptr
+) {
+  glamin_request_context *context = NULL;
+  int status;
+
+  if (!pool || request_id <= 0) {
+    return GLAMIN_ERR_INVALID_ARG;
+  }
+
+  context = calloc(1, sizeof(*context));
+  if (!context) {
+    return GLAMIN_ERR_OOM;
+  }
+
+  context->request_id = request_id;
+  context->function = callback;
+  context->context = context_ptr;
   status = glamin_thread_pool_submit(pool, glamin_complete_request_job, context);
   if (status != GLAMIN_OK) {
     free(context);

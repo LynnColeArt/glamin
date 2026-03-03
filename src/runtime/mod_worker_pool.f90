@@ -12,6 +12,7 @@ module glamin_worker_pool
   public :: stop_pool
   public :: submit_job
   public :: submit_request_job
+  public :: submit_request_job_with_callback
 
   integer(int32), parameter :: DEFAULT_QUEUE_MULTIPLIER = 8
   integer(int32), parameter :: MIN_QUEUE_CAPACITY = 64
@@ -59,6 +60,16 @@ module glamin_worker_pool
       integer(c_int64_t), value :: request_id
       integer(c_int32_t) :: status
     end function glamin_thread_pool_submit_request
+
+    function glamin_thread_pool_submit_request_with_job(handle, request_id, callback, context) &
+      bind(c, name="glamin_thread_pool_submit_request_with_job") result(status)
+      import :: c_ptr, c_funptr, c_int32_t, c_int64_t
+      type(c_ptr), value :: handle
+      integer(c_int64_t), value :: request_id
+      type(c_funptr), value :: callback
+      type(c_ptr), value :: context
+      integer(c_int32_t) :: status
+    end function glamin_thread_pool_submit_request_with_job
   end interface
 
 contains
@@ -126,4 +137,21 @@ contains
 
     status = glamin_thread_pool_submit_request(pool%impl, request_id)
   end subroutine submit_request_job
+
+  subroutine submit_request_job_with_callback(pool, request_id, job_callback, context, status)
+    type(WorkerPool), intent(inout) :: pool
+    integer(int64), intent(in) :: request_id
+    procedure(JobCallback) :: job_callback
+    type(c_ptr), intent(in) :: context
+    integer(int32), intent(out) :: status
+    type(c_funptr) :: callback_ptr
+
+    if (.not. pool%is_running .or. .not. c_associated(pool%impl)) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    callback_ptr = c_funloc(job_callback)
+    status = glamin_thread_pool_submit_request_with_job(pool%impl, request_id, callback_ptr, context)
+  end subroutine submit_request_job_with_callback
 end module glamin_worker_pool
