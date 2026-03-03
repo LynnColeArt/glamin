@@ -20,7 +20,11 @@ Compare immutable metadata from the manifest:
 - `dim`
 - `metric`
 - `normalization`
-- `embedder_version`
+- `embedder.id`
+- `embedder.version`
+- `embedder.model_hash`
+- `embedder.config_hash`
+- `embedder.preprocess_chain`
 - `transform_chain`
 - invariant list and hard constraints
 

@@ -13,6 +13,7 @@ ARFLAGS ?= rcs
 F90_SOURCES = \
   src/common/mod_errors.f90 \
   src/common/mod_metrics.f90 \
+  src/common/mod_embedder.f90 \
   src/common/mod_status.f90 \
   src/common/mod_types.f90 \
   src/common/mod_memory.f90 \

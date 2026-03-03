@@ -13,6 +13,12 @@
 - [x] Implement aligned vector blocks and batch processing.
 - [x] Implement L2/IP kernels (scalar baseline; AVX2 pending).
 
+## Phase 2.5: Embedder Contracts
+- [ ] Define embedder contract schema and validation.
+- [ ] Attach embedder contract to write path (reject mismatches).
+- [ ] Out-of-process reference embedder (bag-of-words baseline).
+- [ ] Embedder contract signing and hash verification hooks.
+
 ## Phase 3: Core Indices
 - [x] Flat index with async search and add.
 - [x] PQ add/search primitives (nbits=8, codebooks required).
@@ -32,6 +38,10 @@
 ## Phase 6: GPU Backend Interface
 - [ ] Define backend capabilities and dispatch.
 - [ ] Implement one backend end-to-end for distance and IVF search.
+
+## Phase 6a: ANE backend via Sporkle C bridge
+- [ ] Integrate Sporkle C bridge and ANE kernels.
+- [ ] Add capability probing and CPU/GPU fallbacks.
 
 ## Phase 7: Performance and Memory
 - [ ] Cache blocking, prefetching, and batch planning.

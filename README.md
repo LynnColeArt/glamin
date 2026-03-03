@@ -19,6 +19,7 @@ See [Roadmap](#status) for current phase.
 - `docs/document_geometry_separation.md`
 - `docs/space_contracts.md`
 - `docs/geometry_diff.md`
+- `docs/geometry_authoring.md`
 
 ---
 

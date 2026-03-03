@@ -24,7 +24,7 @@ Required fields:
 - `dim` — vector dimensionality
 - `metric` — distance metric (`l2`, `ip`, etc.)
 - `normalization` — `none`, `l2`, `mean`, etc.
-- `embedder_version` — embedding model/version
+- `embedder` — embedder contract block (id, version, hashes, signature)
 - `transform_chain` — ordered transform list
 - `created_at` — timestamp
 - `owner` — owning subsystem or domain
@@ -56,9 +56,28 @@ Two spaces are compatible only if:
 - `dim` matches
 - `metric` matches
 - `normalization` matches
-- `embedder_version` is identical or explicitly allowed by policy
+- `embedder.id` and `embedder.version` match
+- `embedder.model_hash` and `embedder.config_hash` match
+- `embedder.preprocess_chain` matches
 
 If any core field changes without a migration plan, it is a **breaking change**.
+
+---
+
+## Embedder Contracts
+
+Every write must include an **embedder contract**. Vectors without a matching
+contract are rejected. This prevents silent contamination across spaces.
+
+Embedder contract fields:
+
+- `id` — embedder identifier
+- `version` — embedder version
+- `input_schema` — expected input shape or format
+- `preprocess_chain` — ordered preprocessing steps
+- `model_hash` — hash of embedder weights or artifact
+- `config_hash` — hash of embedder configuration
+- `signature` — signed attestation of the contract
 
 ---
 
@@ -86,7 +105,14 @@ space_id: geometry.app_state
 dim: 1024
 metric: l2
 normalization: l2
-embedder_version: geomnet-0.4.2
+embedder:
+  id: geomnet
+  version: 0.4.2
+  input_schema: app_state_v3
+  preprocess_chain: [normalize:l2]
+  model_hash: sha256:5a6b...
+  config_hash: sha256:9f2c...
+  signature: ed25519:ab12...
 transform_chain:
   - doc_to_geometry:v2
 created_at: 2024-11-03T10:14:00Z
@@ -103,7 +129,7 @@ invariants:
 ## Enforcement Points
 
 - **Index creation**: validate against contract.
-- **Write path**: reject incompatible vectors.
+- **Write path**: reject vectors without a matching embedder contract.
 - **Load path**: check manifest vs on‑disk metadata.
 - **Deployment**: block if contract diff is breaking.
 

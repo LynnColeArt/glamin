@@ -23,6 +23,7 @@
   - `mod_types.f90`: core types and handles
   - `mod_errors.f90`: error codes and status
   - `mod_metrics.f90`: distance metric enums
+  - `mod_embedder.f90`: embedder contract metadata
   - `mod_status.f90`: request status enumerations
   - `mod_memory.f90`: aligned allocation and memory utilities
 - `src/runtime`
@@ -63,3 +64,4 @@
 - `docs/document_geometry_separation.md`
 - `docs/space_contracts.md`
 - `docs/geometry_diff.md`
+- `docs/geometry_authoring.md`

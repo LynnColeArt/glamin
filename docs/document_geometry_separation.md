@@ -20,7 +20,7 @@ is opt-in and recorded.
   - `DocumentIndex`: content embeddings, retrieval semantics.
   - `GeometryIndex`: application state, behaviors, trajectories.
 - Each vector block belongs to a **space contract**:
-  - `space_id`, `dim`, `metric`, `normalization`, `embedder_version`,
+  - `space_id`, `dim`, `metric`, `normalization`, `embedder` (id/version/hash),
     `transform_chain`, `created_at`.
 - Handles and manifests enforce compatibility (reject mismatched dims/metrics).
 
@@ -55,7 +55,11 @@ space_id: geometry.app_state
 dim: 1024
 metric: l2
 normalization: l2
-embedder_version: geomnet-0.4.2
+embedder:
+  id: geomnet
+  version: 0.4.2
+  preprocess_chain: [normalize:l2]
+  model_hash: sha256:5a6b...
 transform_chain:
   - doc_to_geometry:v2
 created_at: 2024-11-03T10:14:00Z
