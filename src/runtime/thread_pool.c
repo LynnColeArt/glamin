@@ -247,13 +247,13 @@ static void glamin_complete_request_job(void *context) {
 
   if (request_context->function) {
     request_context->function(request_context->context);
+  } else {
+    glamin_mark_request_status(
+      request_context->request_id,
+      GLAMIN_REQUEST_COMPLETED,
+      error_code
+    );
   }
-
-  glamin_mark_request_status(
-    request_context->request_id,
-    GLAMIN_REQUEST_COMPLETED,
-    error_code
-  );
   free(request_context);
 }
 
