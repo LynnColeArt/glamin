@@ -18,6 +18,8 @@ module glamin_async
   public :: wait_request
   public :: cancel_request
   public :: schedule_request
+  public :: get_search_results
+  public :: get_search_results
 
   type :: RequestContext
     integer(int64) :: request_id = 0
@@ -36,6 +38,8 @@ module glamin_async
     type(SearchPlan) :: plan
     type(VectorBlock) :: queries
     type(VectorBlock) :: vectors
+    type(VectorBlock) :: distances
+    type(VectorBlock) :: labels
   end type RequestPayload
 
   integer(int64), save :: next_request_id = 1_int64
@@ -175,6 +179,58 @@ contains
     request_handle%status = request_status(request_handle%id)
     request_handle%error_code = request_error(request_handle%id)
   end subroutine schedule_request
+
+  subroutine get_search_results(request_handle, distances, labels, status)
+    type(Request), intent(in) :: request_handle
+    type(VectorBlock), intent(out) :: distances
+    type(VectorBlock), intent(out) :: labels
+    integer(int32), intent(out) :: status
+
+    if (.not. is_valid_request(request_handle%id)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (request_status(request_handle%id) /= REQUEST_COMPLETED) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    if (request_payload(request_handle%id)%kind /= REQUEST_KIND_SEARCH) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    distances = request_payload(request_handle%id)%distances
+    labels = request_payload(request_handle%id)%labels
+    status = GLAMIN_OK
+  end subroutine get_search_results
+
+  subroutine get_search_results(request_handle, distances, labels, status)
+    type(Request), intent(in) :: request_handle
+    type(VectorBlock), intent(out) :: distances
+    type(VectorBlock), intent(out) :: labels
+    integer(int32), intent(out) :: status
+
+    if (.not. is_valid_request(request_handle%id)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (request_status(request_handle%id) /= REQUEST_COMPLETED) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    if (request_payload(request_handle%id)%kind /= REQUEST_KIND_SEARCH) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    distances = request_payload(request_handle%id)%distances
+    labels = request_payload(request_handle%id)%labels
+    status = GLAMIN_OK
+  end subroutine get_search_results
 
   subroutine glamin_mark_request_status(request_id, status_code, error_code) &
     bind(c, name="glamin_mark_request_status")
@@ -376,6 +432,8 @@ contains
     request_payload(payload_index)%index = index
     request_payload(payload_index)%plan = plan
     request_payload(payload_index)%queries = queries
+    request_payload(payload_index)%distances = VectorBlock()
+    request_payload(payload_index)%labels = VectorBlock()
   end subroutine set_payload_search
 
   subroutine set_payload_vectors(request_id, index, vectors, kind)
@@ -444,14 +502,18 @@ contains
     type(SearchPlan) :: plan
     type(VectorBlock) :: queries
     type(IndexHandle) :: index
-    type(VectorBlock) :: distances
-    type(VectorBlock) :: labels
+    integer(int32) :: status
 
     plan = request_payload(request_id)%plan
     queries = request_payload(request_id)%queries
     index = request_payload(request_id)%index
 
-    call flat_search(index, queries, plan%k, distances, labels)
+    call flat_search(index, queries, plan%k, request_payload(request_id)%distances, &
+      request_payload(request_id)%labels, status)
+    if (status /= GLAMIN_OK) then
+      call mark_request_failed(request_id, status)
+      return
+    end if
 
     request_error(request_id) = GLAMIN_OK
   end subroutine execute_search
@@ -460,11 +522,16 @@ contains
     integer(int64), intent(in) :: request_id
     type(VectorBlock) :: vectors
     type(IndexHandle) :: index
+    integer(int32) :: status
 
     vectors = request_payload(request_id)%vectors
     index = request_payload(request_id)%index
 
-    call flat_add(index, vectors)
+    call flat_add(index, vectors, status)
+    if (status /= GLAMIN_OK) then
+      call mark_request_failed(request_id, status)
+      return
+    end if
 
     request_error(request_id) = GLAMIN_OK
   end subroutine execute_add
@@ -473,11 +540,16 @@ contains
     integer(int64), intent(in) :: request_id
     type(VectorBlock) :: vectors
     type(IndexHandle) :: index
+    integer(int32) :: status
 
     vectors = request_payload(request_id)%vectors
     index = request_payload(request_id)%index
 
-    call flat_add(index, vectors)
+    call flat_add(index, vectors, status)
+    if (status /= GLAMIN_OK) then
+      call mark_request_failed(request_id, status)
+      return
+    end if
 
     request_error(request_id) = GLAMIN_OK
   end subroutine execute_train
