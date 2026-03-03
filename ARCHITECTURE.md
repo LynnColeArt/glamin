@@ -58,3 +58,8 @@
 ## Serialization
 - Binary IO preserves FAISS headers and index layouts where supported.
 - Endianness is handled by `mod_stream` utilities.
+
+## Related Docs
+- `docs/document_geometry_separation.md`
+- `docs/space_contracts.md`
+- `docs/geometry_diff.md`

@@ -85,3 +85,10 @@ created_at: 2024-11-03T10:14:00Z
 - Controlled interchange and traceability.
 - Independent optimization of document vs geometry indexes.
 - Stable FAISS compatibility with richer semantic context.
+
+---
+
+## Related Docs
+
+- `docs/space_contracts.md`
+- `docs/geometry_diff.md`
