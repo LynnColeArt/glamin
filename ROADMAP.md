@@ -16,7 +16,7 @@
 ## Phase 2.5: Embedder Contracts
 - [ ] Define embedder contract schema and validation.
 - [ ] Attach embedder contract to write path (reject mismatches).
-- [ ] Out-of-process reference embedder (bag-of-words baseline).
+- [ ] CPU-only reference embedder (bag-of-words baseline).
 - [ ] Embedder contract signing and hash verification hooks.
 
 ## Phase 3: Core Indices
@@ -42,6 +42,11 @@
 ## Phase 6a: ANE backend via Sporkle C bridge
 - [ ] Integrate Sporkle C bridge and ANE kernels.
 - [ ] Add capability probing and CPU/GPU fallbacks.
+
+## Phase 6b: GPU/NPU embedder acceleration
+- [ ] Define embedder hardware classes and selection rules.
+- [ ] Add GPU embedder bridge (desktop-class baseline).
+- [ ] Add NPU embedder bridge (mobile/edge hardware).
 
 ## Phase 7: Performance and Memory
 - [ ] Cache blocking, prefetching, and batch planning.

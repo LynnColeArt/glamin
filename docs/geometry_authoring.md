@@ -41,6 +41,14 @@ editable source of truth.
 
 ---
 
+## Embedder Defaults
+
+- **CPU-first**: the default embedder is CPU-only for easy deployment.
+- **GPU/NPU optional**: accelerated embedders are separate contracts that opt
+  into specific hardware classes when available.
+
+---
+
 ## Example
 
 See `docs/geometry_spec.yaml` for a complete sample.
