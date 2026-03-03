@@ -54,6 +54,16 @@ editable source of truth.
 
 ---
 
+## Tooling Plan
+
+Near-term tooling targets:
+
+- Schema validator + canonicalizer for `geometry_spec.yaml`
+- Compiler output: `manifest.json` and `contracts.json`
+- First executable example spec using mints, corridors, and traces
+
+---
+
 ## Example
 
 See `docs/geometry_spec.yaml` for a complete sample.
