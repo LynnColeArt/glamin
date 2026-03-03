@@ -47,7 +47,8 @@ editable source of truth.
 - **GPU/NPU optional**: accelerated embedders are separate contracts that opt
   into specific hardware classes when available.
 - **Hardware requirements**: embedder contracts include `hardware_class`,
-  `min_ram_mb`, and `min_vram_mb` for deterministic selection.
+  `min_ram_mb`, and `min_vram_mb` for deterministic selection against a
+  hardware profile.
 
 ---
 

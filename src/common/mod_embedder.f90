@@ -6,6 +6,7 @@ module glamin_embedder
 
   public :: EmbedderSpec
   public :: EmbedderContract
+  public :: HardwareProfile
   public :: EMBEDDER_ID_LEN
   public :: EMBEDDER_VERSION_LEN
   public :: EMBEDDER_SCHEMA_LEN
@@ -15,6 +16,7 @@ module glamin_embedder
   public :: EMBEDDER_OWNER_LEN
   public :: EMBEDDER_HARDWARE_LEN
   public :: is_embedder_compatible
+  public :: is_embedder_supported
   public :: has_embedder_signature
 
   integer, parameter :: EMBEDDER_ID_LEN = 64
@@ -50,6 +52,13 @@ module glamin_embedder
     character(len=EMBEDDER_OWNER_LEN) :: signer = ''
   end type EmbedderContract
 
+  type :: HardwareProfile
+    integer(int32) :: ram_mb = 0
+    integer(int32) :: vram_mb = 0
+    logical :: has_gpu = .false.
+    logical :: has_npu = .false.
+  end type HardwareProfile
+
 contains
   pure logical function is_embedder_compatible(left, right)
     type(EmbedderSpec), intent(in) :: left
@@ -67,9 +76,55 @@ contains
     is_embedder_compatible = .true.
   end function is_embedder_compatible
 
+  pure logical function is_embedder_supported(spec, profile)
+    type(EmbedderSpec), intent(in) :: spec
+    type(HardwareProfile), intent(in) :: profile
+    character(len=EMBEDDER_HARDWARE_LEN) :: required_class
+
+    is_embedder_supported = .false.
+    if (spec%min_ram_mb > profile%ram_mb) return
+    if (spec%min_vram_mb > profile%vram_mb) return
+
+    required_class = normalize_hardware_class(spec%hardware_class)
+    if (len_trim(required_class) == 0) required_class = 'cpu'
+
+    select case (trim(required_class))
+    case ('any')
+      is_embedder_supported = .true.
+    case ('cpu')
+      is_embedder_supported = .true.
+    case ('gpu')
+      is_embedder_supported = profile%has_gpu
+    case ('npu')
+      is_embedder_supported = profile%has_npu
+    case ('hybrid')
+      is_embedder_supported = profile%has_gpu .and. profile%has_npu
+    case default
+      is_embedder_supported = .false.
+    end select
+  end function is_embedder_supported
+
   pure logical function has_embedder_signature(contract)
     type(EmbedderContract), intent(in) :: contract
 
     has_embedder_signature = len_trim(contract%signature) > 0
   end function has_embedder_signature
+
+  pure function normalize_hardware_class(value) result(normalized)
+    character(len=*), intent(in) :: value
+    character(len=EMBEDDER_HARDWARE_LEN) :: normalized
+    integer :: idx
+    integer :: code
+
+    normalized = ''
+    do idx = 1, min(len_trim(value), EMBEDDER_HARDWARE_LEN)
+      code = iachar(value(idx:idx))
+      if (code >= iachar('A') .and. code <= iachar('Z')) then
+        normalized(idx:idx) = achar(code + 32)
+      else
+        normalized(idx:idx) = value(idx:idx)
+      end if
+    end do
+    normalized = adjustl(normalized)
+  end function normalize_hardware_class
 end module glamin_embedder
