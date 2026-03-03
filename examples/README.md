@@ -29,3 +29,18 @@ Run:
 ```
 ./faiss_round_trip_demo
 ```
+
+## pq_demo.f90
+
+Build after running `make` in the repo root:
+
+```
+gfortran -std=f2018 -Ibuild/mod examples/pq_demo.f90 build/libglamin.a \
+  -lpthread -o pq_demo
+```
+
+Run:
+
+```
+./pq_demo
+```
