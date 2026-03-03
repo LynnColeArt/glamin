@@ -14,6 +14,14 @@ See [Roadmap](#status) for current phase.
 
 ---
 
+## Docs
+
+- `docs/document_geometry_separation.md`
+- `docs/space_contracts.md`
+- `docs/geometry_diff.md`
+
+---
+
 ## The Idea
 
 Glamin is a new compute primitive: **executable geometry**.
