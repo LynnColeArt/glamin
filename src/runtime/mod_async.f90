@@ -468,6 +468,10 @@ contains
     case default
       call mark_request_failed(request_id, GLAMIN_ERR_INVALID_ARG)
     end select
+
+    if (request_status(request_id) == REQUEST_RUNNING) then
+      request_status(request_id) = REQUEST_COMPLETED
+    end if
   end subroutine execute_request
 
   subroutine execute_search(request_id)
