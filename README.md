@@ -6,6 +6,14 @@
 
 ---
 
+## Status: Experimental
+
+**This is a work in progress.** Core async runtime exists, geometric logic layer is nascent. APIs will change. Not yet ready for production use.
+
+See [Roadmap](#status) for current phase.
+
+---
+
 ## The Idea
 
 Glamin is a new compute primitive: **executable geometry**.
@@ -97,6 +105,17 @@ Glamin Runtime
 
 ---
 
+## Language Bindings
+
+**Planned:**
+- **Python** — Primary interface for AI/ML workflows
+- **Go** — Systems integration, microservices
+- **Rust** — Performance-critical applications, WASM targets
+
+Core library is Fortran/C for maximum performance and portability. Bindings will follow once the native API stabilizes.
+
+---
+
 ## Building
 
 Requirements:
@@ -140,6 +159,9 @@ examples/         # Usage examples (to be added)
 - [ ] IVF index
 - [ ] HNSW graph navigation
 - [ ] FAISS format parity
+- [ ] Python bindings
+- [ ] Go bindings
+- [ ] Rust bindings
 
 See [ROADMAP.md](ROADMAP.md) for detailed phases.
 
