@@ -1,0 +1,12 @@
+build/
+*.o
+*.obj
+*.mod
+*.smod
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+.DS_Store
