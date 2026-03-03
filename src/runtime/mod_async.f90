@@ -19,7 +19,6 @@ module glamin_async
   public :: cancel_request
   public :: schedule_request
   public :: get_search_results
-  public :: get_search_results
 
   type :: RequestContext
     integer(int64) :: request_id = 0
@@ -179,32 +178,6 @@ contains
     request_handle%status = request_status(request_handle%id)
     request_handle%error_code = request_error(request_handle%id)
   end subroutine schedule_request
-
-  subroutine get_search_results(request_handle, distances, labels, status)
-    type(Request), intent(in) :: request_handle
-    type(VectorBlock), intent(out) :: distances
-    type(VectorBlock), intent(out) :: labels
-    integer(int32), intent(out) :: status
-
-    if (.not. is_valid_request(request_handle%id)) then
-      status = GLAMIN_ERR_INVALID_ARG
-      return
-    end if
-
-    if (request_status(request_handle%id) /= REQUEST_COMPLETED) then
-      status = GLAMIN_ERR_NOT_READY
-      return
-    end if
-
-    if (request_payload(request_handle%id)%kind /= REQUEST_KIND_SEARCH) then
-      status = GLAMIN_ERR_INVALID_ARG
-      return
-    end if
-
-    distances = request_payload(request_handle%id)%distances
-    labels = request_payload(request_handle%id)%labels
-    status = GLAMIN_OK
-  end subroutine get_search_results
 
   subroutine get_search_results(request_handle, distances, labels, status)
     type(Request), intent(in) :: request_handle
