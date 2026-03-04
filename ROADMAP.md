@@ -16,7 +16,7 @@
 ## Phase 2.5: Embedder Contracts
 - [ ] Define embedder contract schema and validation.
 - [ ] Attach embedder contract to write path (reject mismatches).
-- [ ] CPU-only reference embedder (bag-of-words baseline).
+- [x] CPU-only reference embedder (bag-of-words baseline).
 - [ ] Embedder contract signing and hash verification hooks.
 
 ## Phase 2.6: Geometry Spec Tooling
