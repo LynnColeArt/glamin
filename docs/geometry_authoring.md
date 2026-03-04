@@ -38,6 +38,8 @@ editable source of truth.
 - **Deterministic**: canonicalization + hashes remove ambiguity.
 - **Auditable**: embedder contract attached to every write.
 - **Decoupled**: Glamin stays pure Fortran; embedder runs out‑of‑process.
+- **Directed**: optional `entry_mints` + `objectives` describe start points
+  and target behaviors for authoring clarity.
 
 ---
 
@@ -59,7 +61,8 @@ editable source of truth.
 Near-term tooling targets:
 
 - Schema validator + canonicalizer for `geometry_spec.yaml`
-- Compiler output: `manifest.json` and `contracts.json`
+- Compiler output: `manifest.json`, `contracts.json`, `vector_layout.json`,
+  and `vectors.bin` (stub)
 - First executable example spec using mints, corridors, and traces
 - Visualizer stub that emits Graphviz DOT
 
@@ -84,6 +87,12 @@ Compile to manifest + contracts:
 
 ```
 build/venv/bin/python tools/geometry_spec_tool.py compile docs/geometry_spec.yaml --out-dir build/specs
+```
+
+Embed vectors with the CPU baseline:
+
+```
+build/venv/bin/python tools/geometry_embedder_cpu.py docs/geometry_spec.yaml --output build/specs/vectors.bin
 ```
 
 Canonicalize to JSON:

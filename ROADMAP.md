@@ -20,9 +20,9 @@
 - [ ] Embedder contract signing and hash verification hooks.
 
 ## Phase 2.6: Geometry Spec Tooling
-- [ ] Schema validator + canonicalizer for `geometry_spec.yaml`.
-- [ ] Emit `manifest.json` + `contracts.json` from authoring spec.
-- [ ] Ship a first real example spec (mints/corridors/traces).
+- [x] Schema validator + canonicalizer for `geometry_spec.yaml`.
+- [x] Emit `manifest.json` + `contracts.json` from authoring spec.
+- [x] Ship a first real example spec (mints/corridors/traces).
 
 ## Phase 3: Core Indices
 - [x] Flat index with async search and add.

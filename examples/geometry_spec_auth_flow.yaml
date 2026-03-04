@@ -20,6 +20,19 @@ embedder:
   min_ram_mb: 128
   min_vram_mb: 0
 
+entry_mints:
+  - auth.validate
+
+objectives:
+  - objective_id: auth_success
+    description: Reach allow for valid users.
+    target_mints: [auth.allow]
+    priority: 1
+  - objective_id: auth_safe_reject
+    description: Route anomalies to deny or lockout.
+    target_mints: [auth.deny, auth.lockout]
+    priority: 2
+
 spaces:
   - space_id: geometry.auth
     dim: 512

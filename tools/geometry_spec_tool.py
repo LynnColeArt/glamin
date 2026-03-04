@@ -4,6 +4,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Dict, List
 
 try:
     import yaml
@@ -55,10 +56,79 @@ def build_manifest(spec: dict) -> dict:
     for key in ("spec_version", "spec_id", "title", "created_at", "owner", "notes"):
         if key in spec:
             manifest[key] = spec[key]
-    for key in ("embedder", "spaces", "mints", "corridors", "traces"):
+    for key in (
+        "embedder",
+        "entry_mints",
+        "objectives",
+        "spaces",
+        "mints",
+        "corridors",
+        "traces",
+    ):
         if key in spec:
             manifest[key] = spec[key]
     return manifest
+
+
+def build_vector_layout(spec: dict) -> dict:
+    spaces = spec["spaces"]
+    mints = spec.get("mints", [])
+    space_map = {space["space_id"]: space for space in spaces}
+    mints_by_space: Dict[str, List[str]] = {space["space_id"]: [] for space in spaces}
+
+    for mint in mints:
+        space_id = mint["space_id"]
+        if space_id not in space_map:
+            raise ValueError(f"Mint references unknown space_id: {space_id}")
+        mints_by_space[space_id].append(mint["mint_id"])
+
+    layout_spaces = []
+    offset_bytes = 0
+    total_vectors = 0
+
+    for space in spaces:
+        space_id = space["space_id"]
+        dim = int(space["dim"])
+        stride_bytes = dim * 4
+        mint_ids = mints_by_space.get(space_id, [])
+
+        mint_layout = []
+        for idx, mint_id in enumerate(mint_ids):
+            mint_layout.append(
+                {
+                    "mint_id": mint_id,
+                    "index": idx,
+                    "offset_bytes": offset_bytes + idx * stride_bytes,
+                }
+            )
+
+        count = len(mint_layout)
+        layout_spaces.append(
+            {
+                "space_id": space_id,
+                "dim": dim,
+                "count": count,
+                "byte_stride": stride_bytes,
+                "offset_bytes": offset_bytes,
+                "mints": mint_layout,
+            }
+        )
+        offset_bytes += count * stride_bytes
+        total_vectors += count
+
+    return {
+        "dtype": "float32",
+        "endianness": "little",
+        "total_vectors": total_vectors,
+        "total_bytes": offset_bytes,
+        "spaces": layout_spaces,
+    }
+
+
+def write_vectors_stub(layout: dict, path: Path) -> None:
+    total_bytes = int(layout["total_bytes"])
+    with path.open("wb") as handle:
+        handle.truncate(total_bytes)
 
 
 def build_contracts(spec: dict) -> dict:
@@ -129,9 +199,12 @@ def cmd_compile(args: argparse.Namespace) -> int:
 
     manifest = build_manifest(spec)
     contracts = build_contracts(spec)
+    layout = build_vector_layout(spec)
 
     write_json(out_dir / "manifest.json", manifest, pretty=True)
     write_json(out_dir / "contracts.json", contracts, pretty=True)
+    write_json(out_dir / "vector_layout.json", layout, pretty=True)
+    write_vectors_stub(layout, out_dir / "vectors.bin")
     return 0
 
 

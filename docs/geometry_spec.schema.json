@@ -10,6 +10,29 @@
     "created_at": { "type": "string", "format": "date-time" },
     "owner": { "type": "string", "minLength": 1 },
     "notes": { "type": "string" },
+    "entry_mints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "objectives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["objective_id", "target_mints"],
+        "properties": {
+          "objective_id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "target_mints": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "priority": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    },
     "embedder": {
       "type": "object",
       "required": [
@@ -65,7 +88,10 @@
               "type": "object",
               "required": ["type"],
               "properties": {
-                "type": { "type": "string", "minLength": 1 },
+                "type": {
+                  "type": "string",
+                  "enum": ["dim", "metric", "normalization", "norm_bound", "distance_bound"]
+                },
                 "equals": {},
                 "allowed": { "type": "array" },
                 "min": { "type": "number" },
@@ -108,8 +134,7 @@
           "between": {
             "type": "array",
             "items": { "type": "string" },
-            "minItems": 2,
-            "maxItems": 2
+            "minItems": 2
           },
           "width": { "type": "number", "minimum": 0 },
           "risk_profile": { "type": "string" },
@@ -130,7 +155,14 @@
             "type": "array",
             "items": { "type": "string" },
             "minItems": 1
-          }
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "timestamps": {
+            "type": "array",
+            "items": { "type": "string", "format": "date-time" }
+          },
+          "notes": { "type": "string" },
+          "metadata": { "type": "object" }
         },
         "additionalProperties": false
       }

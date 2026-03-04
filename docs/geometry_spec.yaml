@@ -20,6 +20,15 @@ embedder:
   min_ram_mb: 128
   min_vram_mb: 0
 
+entry_mints:
+  - auth.validate
+
+objectives:
+  - objective_id: auth_success
+    description: Reach an allow decision for valid users.
+    target_mints: [auth.allow]
+    priority: 1
+
 spaces:
   - space_id: geometry.auth
     dim: 512

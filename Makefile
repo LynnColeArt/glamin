@@ -10,6 +10,7 @@ SPEC ?= docs/geometry_spec.yaml
 SPEC_OUT ?= $(BUILD_DIR)/specs
 SPEC_CANON ?= $(SPEC_OUT)/spec.json
 SPEC_DOT ?= $(SPEC_OUT)/spec.dot
+SPEC_LAYOUT ?= $(SPEC_OUT)/vector_layout.json
 VENV_PY ?= $(VENV_DIR)/bin/python
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
@@ -65,7 +66,7 @@ $(MOD_DIR):
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize
+.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)
@@ -82,5 +83,8 @@ spec-canonicalize: spec-venv
 
 spec-visualize: spec-venv
 	$(VENV_PY) tools/geometry_spec_visualize.py $(SPEC) --output $(SPEC_DOT)
+
+spec-embed: spec-compile
+	$(VENV_PY) tools/geometry_embedder_cpu.py $(SPEC) --output $(SPEC_OUT)/vectors.bin
 
 .PHONY: all clean
