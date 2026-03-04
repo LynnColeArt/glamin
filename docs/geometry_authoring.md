@@ -12,6 +12,7 @@ manifest and vector payloads that Glamin validates via contracts.
 - `docs/geometry_spec.schema.json`: JSON schema for validation
 - Output artifacts from the compiler:
   - `manifest.json`: canonical, sorted contract manifest
+  - `vector_layout.json`: vector ordering and offsets
   - `vectors.bin`: raw vector payloads
   - `contracts.json`: embedder + space contracts with signatures
 
