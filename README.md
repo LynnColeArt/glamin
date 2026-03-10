@@ -185,13 +185,3 @@ See [ROADMAP.md](ROADMAP.md) for detailed phases.
 5. **Explicit confidence** — Uncertainty is a first-class value, not an edge case
 
 See [STYLE_GUIDE.md](STYLE_GUIDE.md) for coding conventions.
-
----
-
-## License
-
-GPL-3.0-only
-
----
-
-*We're not just writing code. We're building a compute revolution.*
