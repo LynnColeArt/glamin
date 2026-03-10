@@ -102,6 +102,13 @@ Load vectors in Fortran (dim/count from `vector_layout.json`):
 call load_vector_block("build/specs/vectors.bin", dim, count, vectors, status)
 ```
 
+Load a Flat index directly from the layout:
+
+```
+call load_flat_from_layout("build/specs/vector_layout.json", "build/specs/vectors.bin", &
+  "geometry.auth", METRIC_L2, index, status)
+```
+
 Canonicalize to JSON:
 
 ```

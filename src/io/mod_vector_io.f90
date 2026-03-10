@@ -9,6 +9,7 @@ module glamin_vector_io
   private
 
   public :: load_vector_block
+  public :: load_vector_block_slice
   public :: free_vector_block
 
   integer(int32), parameter :: VECTOR_ALIGNMENT = 64
@@ -20,6 +21,16 @@ contains
     integer(int64), intent(in) :: count
     type(VectorBlock), intent(inout) :: block
     integer(int32), intent(out) :: status
+    call load_vector_block_slice(path, dim, count, 0_int64, block, status)
+  end subroutine load_vector_block
+
+  subroutine load_vector_block_slice(path, dim, count, offset_bytes, block, status)
+    character(len=*), intent(in) :: path
+    integer(int32), intent(in) :: dim
+    integer(int64), intent(in) :: count
+    integer(int64), intent(in) :: offset_bytes
+    type(VectorBlock), intent(inout) :: block
+    integer(int32), intent(out) :: status
     type(IoStream) :: stream
     type(c_ptr) :: buffer
     integer(int32) :: free_status
@@ -28,7 +39,7 @@ contains
 
     status = GLAMIN_OK
     buffer = c_null_ptr
-    if (dim <= 0_int32 .or. count < 0_int64) then
+    if (dim <= 0_int32 .or. count < 0_int64 .or. offset_bytes < 0_int64) then
       status = GLAMIN_ERR_INVALID_ARG
       return
     end if
@@ -48,6 +59,9 @@ contains
     total_bytes = int(dim, int64) * count * int(elem_size, int64)
 
     call open_stream(stream, path, "rb")
+    if (offset_bytes > 0_int64) then
+      call stream_seek(stream, offset_bytes)
+    end if
     call read_bytes(stream, buffer, total_bytes)
     call close_stream(stream)
 
@@ -57,7 +71,7 @@ contains
     block%stride = dim
     block%elem_size = elem_size
     block%alignment = VECTOR_ALIGNMENT
-  end subroutine load_vector_block
+  end subroutine load_vector_block_slice
 
   subroutine free_vector_block(block, status)
     type(VectorBlock), intent(inout) :: block

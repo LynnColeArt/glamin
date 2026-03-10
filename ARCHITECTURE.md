@@ -39,6 +39,8 @@
 - `src/io`
   - `mod_stream.f90`: binary stream abstraction
   - `mod_vector_io.f90`: vector block loading from raw files
+  - `mod_geometry_layout.f90`: parse vector layout metadata
+  - `mod_geometry_loader.f90`: load vectors into flat index
   - `mod_faiss_io.f90`: FAISS format adapters
 - `src/gpu`
   - `mod_gpu_backend.f90`: backend abstraction interface
