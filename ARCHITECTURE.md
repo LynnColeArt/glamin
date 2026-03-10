@@ -38,6 +38,7 @@
   - `mod_flat.f90`, `mod_ivf.f90`, `mod_pq.f90`, `mod_ivfpq.f90`, `mod_hnsw.f90`
 - `src/io`
   - `mod_stream.f90`: binary stream abstraction
+  - `mod_vector_io.f90`: vector block loading from raw files
   - `mod_faiss_io.f90`: FAISS format adapters
 - `src/gpu`
   - `mod_gpu_backend.f90`: backend abstraction interface

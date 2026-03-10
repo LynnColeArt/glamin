@@ -25,7 +25,7 @@ manifest and vector payloads that Glamin validates via contracts.
 3. **Canonicalize** → deterministic JSON (sorted keys, stable float formatting).
 4. **Embed**: the embedder service produces vectors for each mint/asset.
 5. **Contract**: embedder contract is hashed + signed.
-6. **Emit**: `manifest.json`, `vectors.bin`, `contracts.json`.
+6. **Emit**: `manifest.json`, `vector_layout.json`, `vectors.bin`, `contracts.json`.
 7. **Load**: Glamin rejects vectors that lack a matching embedder contract.
 
 The core only consumes the compiled artifacts. The authoring spec remains the
@@ -94,6 +94,12 @@ Embed vectors with the CPU baseline:
 
 ```
 build/venv/bin/python tools/geometry_embedder_cpu.py docs/geometry_spec.yaml --output build/specs/vectors.bin
+```
+
+Load vectors in Fortran (dim/count from `vector_layout.json`):
+
+```
+call load_vector_block("build/specs/vectors.bin", dim, count, vectors, status)
 ```
 
 Canonicalize to JSON:

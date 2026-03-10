@@ -35,6 +35,7 @@ F90_SOURCES = \
   src/index/mod_ivfpq.f90 \
   src/index/mod_hnsw.f90 \
   src/io/mod_stream.f90 \
+  src/io/mod_vector_io.f90 \
   src/io/mod_faiss_io.f90 \
   src/gpu/mod_gpu_backend.f90
 
