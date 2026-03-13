@@ -156,6 +156,7 @@ See `include/glamin_pipeline.h` and `examples/pipeline_callbacks_demo.c` for a m
 
 Contract validation hooks are available via `glamin_set_contract_validators`.
 See `include/glamin_contracts.h` for the C callback signatures.
+See `examples/contract_validators_demo.c` for a minimal registration stub.
 
 Run the C-driven pipeline demo (C registers callbacks, Fortran runs the pipeline):
 
