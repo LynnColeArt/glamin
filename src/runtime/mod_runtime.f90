@@ -102,7 +102,7 @@ contains
   end subroutine submit_train_async
 
   subroutine submit_load_flat_async(context, layout_path, vectors_path, space_id, metric, &
-      request_handle, status)
+      request_handle, status, contracts_path)
     type(RuntimeContext), intent(inout) :: context
     character(len=*), intent(in) :: layout_path
     character(len=*), intent(in) :: vectors_path
@@ -110,13 +110,15 @@ contains
     integer(int32), intent(in) :: metric
     type(Request), intent(out) :: request_handle
     integer(int32), intent(out) :: status
+    character(len=*), intent(in), optional :: contracts_path
 
     if (.not. context%is_ready) then
       status = GLAMIN_ERR_NOT_READY
       return
     end if
 
-    call submit_load_flat(layout_path, vectors_path, space_id, metric, request_handle)
+    call submit_load_flat(layout_path, vectors_path, space_id, metric, request_handle, &
+      contracts_path)
     call schedule_request(context%pool, request_handle, status)
   end subroutine submit_load_flat_async
 

@@ -139,6 +139,8 @@ gfortran -std=f2018 -Ibuild/mod -o build/async_geometry_loader_demo \
 ./build/async_geometry_loader_demo
 ```
 
+The async loader demo passes `contracts.json` to enforce embedder metadata.
+
 Run the async pipeline demo (compile + embed + load):
 
 ```

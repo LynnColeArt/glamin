@@ -49,7 +49,8 @@ program async_geometry_loader_demo
   end if
 
   call submit_load_flat_async(runtime, "build/specs/vector_layout.json", &
-    "build/specs/vectors.bin", "geometry.auth", METRIC_L2, request_handle, status)
+    "build/specs/vectors.bin", "geometry.auth", METRIC_L2, request_handle, status, &
+    "build/specs/contracts.json")
   if (status /= GLAMIN_OK) then
     call stop_runtime(runtime, status)
     error stop "submit_load_flat_async failed"

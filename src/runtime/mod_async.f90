@@ -52,6 +52,7 @@ module glamin_async
     type(VectorBlock) :: labels
     character(len=LOAD_PATH_LEN) :: layout_path = ''
     character(len=LOAD_PATH_LEN) :: vectors_path = ''
+    character(len=LOAD_PATH_LEN) :: contracts_path = ''
     character(len=LOAD_PATH_LEN) :: spec_path = ''
     character(len=LOAD_PATH_LEN) :: out_dir = ''
     character(len=LOAD_SPACE_LEN) :: space_id = ''
@@ -110,17 +111,20 @@ contains
     end if
   end subroutine submit_train
 
-  subroutine submit_load_flat(layout_path, vectors_path, space_id, metric, request_handle)
+  subroutine submit_load_flat(layout_path, vectors_path, space_id, metric, request_handle, &
+      contracts_path)
     character(len=*), intent(in) :: layout_path
     character(len=*), intent(in) :: vectors_path
     character(len=*), intent(in) :: space_id
     integer(int32), intent(in) :: metric
     type(Request), intent(out) :: request_handle
+    character(len=*), intent(in), optional :: contracts_path
     integer(int32) :: status
 
     call register_request(request_handle, status)
     if (status == GLAMIN_OK) then
-      call set_payload_load(request_handle%id, layout_path, vectors_path, space_id, metric)
+      call set_payload_load(request_handle%id, layout_path, vectors_path, space_id, metric, &
+        contracts_path)
     end if
   end subroutine submit_load_flat
 
@@ -509,12 +513,14 @@ contains
     request_payload(payload_index)%vectors = vectors
   end subroutine set_payload_vectors
 
-  subroutine set_payload_load(request_id, layout_path, vectors_path, space_id, metric)
+  subroutine set_payload_load(request_id, layout_path, vectors_path, space_id, metric, &
+      contracts_path)
     integer(int64), intent(in) :: request_id
     character(len=*), intent(in) :: layout_path
     character(len=*), intent(in) :: vectors_path
     character(len=*), intent(in) :: space_id
     integer(int32), intent(in) :: metric
+    character(len=*), intent(in), optional :: contracts_path
     integer(int32) :: payload_index
 
     payload_index = int(request_id, int32)
@@ -525,6 +531,11 @@ contains
     request_payload(payload_index)%kind = REQUEST_KIND_LOAD
     request_payload(payload_index)%layout_path = trim(layout_path)
     request_payload(payload_index)%vectors_path = trim(vectors_path)
+    if (present(contracts_path)) then
+      request_payload(payload_index)%contracts_path = trim(contracts_path)
+    else
+      request_payload(payload_index)%contracts_path = ''
+    end if
     request_payload(payload_index)%space_id = trim(space_id)
     request_payload(payload_index)%metric = metric
     request_payload(payload_index)%index = IndexHandle()
@@ -670,6 +681,7 @@ contains
     integer(int64), intent(in) :: request_id
     character(len=LOAD_PATH_LEN) :: layout_path
     character(len=LOAD_PATH_LEN) :: vectors_path
+    character(len=LOAD_PATH_LEN) :: contracts_path
     character(len=LOAD_SPACE_LEN) :: space_id
     integer(int32) :: metric
     type(IndexHandle) :: index
@@ -677,11 +689,17 @@ contains
 
     layout_path = request_payload(request_id)%layout_path
     vectors_path = request_payload(request_id)%vectors_path
+    contracts_path = request_payload(request_id)%contracts_path
     space_id = request_payload(request_id)%space_id
     metric = request_payload(request_id)%metric
 
-    call load_flat_from_layout(trim(layout_path), trim(vectors_path), trim(space_id), metric, &
-      index, status)
+    if (len_trim(contracts_path) > 0) then
+      call load_flat_from_layout(trim(layout_path), trim(vectors_path), trim(space_id), metric, &
+        index, status, trim(contracts_path))
+    else
+      call load_flat_from_layout(trim(layout_path), trim(vectors_path), trim(space_id), metric, &
+        index, status)
+    end if
     if (status /= GLAMIN_OK) then
       call mark_request_failed(request_id, status)
       return
