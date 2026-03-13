@@ -3,6 +3,7 @@ module glamin_index_pq
   use iso_c_binding, only: c_associated, c_f_pointer, c_int8_t, c_loc, c_null_ptr, c_ptr, &
     c_size_t
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_OOM
+  use glamin_kmeans, only: kmeans_train
   use glamin_memory, only: allocate_aligned, free_aligned
   use glamin_metrics, only: METRIC_IP, METRIC_L2
   use glamin_types, only: VectorBlock, IndexHandle, INDEX_KIND_PQ, INDEX_KIND_UNKNOWN
@@ -614,33 +615,402 @@ contains
     call c_f_pointer(index_handle%impl, pq_index)
   end subroutine pq_handle
 
-  subroutine pq_create(codebook, dim, m, ksub)
+  subroutine pq_create(codebook, dim, m, ksub, status)
     type(ProductQuantizerCodebook), intent(out) :: codebook
     integer(int32), intent(in) :: dim
     integer(int32), intent(in) :: m
     integer(int32), intent(in) :: ksub
-    error stop "pq_create not implemented"
+    integer(int32), intent(out), optional :: status
+    integer(int32) :: dsub
+    integer(int32) :: elem_bytes
+    integer(int64) :: total_bytes
+    integer(int32) :: alloc_status
+
+    call set_status(status, GLAMIN_OK, "")
+
+    if (dim <= 0_int32 .or. m <= 0_int32 .or. ksub <= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_create invalid args")
+      return
+    end if
+
+    if (mod(dim, m) /= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_create dim not divisible")
+      return
+    end if
+
+    dsub = dim / m
+    elem_bytes = int(storage_size(0.0_real32) / 8, int32)
+
+    codebook%dim = dim
+    codebook%m = m
+    codebook%ksub = ksub
+
+    total_bytes = int(m, int64) * int(ksub, int64) * int(dsub, int64) * int(elem_bytes, int64)
+    call allocate_aligned(codebook%codebooks%data, int(total_bytes, c_size_t), &
+      int(64, c_size_t), alloc_status)
+    if (alloc_status /= GLAMIN_OK) then
+      call set_status(status, alloc_status, "pq_create alloc failed")
+      return
+    end if
+
+    codebook%codebooks%length = int(m, int64) * int(ksub, int64)
+    codebook%codebooks%dim = dsub
+    codebook%codebooks%stride = dsub
+    codebook%codebooks%elem_size = elem_bytes
+    codebook%codebooks%alignment = 64
   end subroutine pq_create
 
-  subroutine pq_train(codebook, vectors)
+  subroutine pq_train(codebook, vectors, status)
     type(ProductQuantizerCodebook), intent(inout) :: codebook
     type(VectorBlock), intent(in) :: vectors
-    error stop "pq_train not implemented"
+    integer(int32), intent(out), optional :: status
+    integer(int32) :: local_status
+    integer(int32) :: dim
+    integer(int32) :: m
+    integer(int32) :: ksub
+    integer(int32) :: dsub
+    integer(int32) :: stride_v
+    integer(int64) :: vector_count
+    integer(int32) :: elem_bytes
+    integer(int32) :: sub_index
+    integer(int64) :: vec_index
+    integer(int64) :: vec_offset
+    integer(int64) :: dst_offset
+    integer(int32) :: alloc_status
+    integer(int32) :: free_status
+    type(VectorBlock) :: sub_vectors
+    type(VectorBlock) :: sub_centroids
+    real(real32), pointer :: vector_data(:)
+    real(real32), pointer :: sub_data(:)
+    real(real32), pointer :: centroid_data(:)
+    real(real32), pointer :: codebook_data(:)
+
+    call set_status(status, GLAMIN_OK, "")
+
+    if (.not. c_associated(vectors%data)) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_train vectors missing")
+      return
+    end if
+
+    dim = codebook%dim
+    m = codebook%m
+    ksub = codebook%ksub
+    if (dim <= 0_int32 .or. m <= 0_int32 .or. ksub <= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_train invalid codebook")
+      return
+    end if
+
+    if (vectors%dim /= dim) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_train dim mismatch")
+      return
+    end if
+
+    if (mod(dim, m) /= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_train dim not divisible")
+      return
+    end if
+
+    dsub = dim / m
+    vector_count = vectors%length
+    if (vector_count <= 0_int64) then
+      return
+    end if
+
+    stride_v = vectors%stride
+    if (stride_v <= 0_int32) stride_v = dim
+    if (stride_v < dim) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_train stride invalid")
+      return
+    end if
+
+    elem_bytes = int(storage_size(0.0_real32) / 8, int32)
+
+    if (.not. c_associated(codebook%codebooks%data)) then
+      call pq_create(codebook, dim, m, ksub, local_status)
+      if (local_status /= GLAMIN_OK) then
+        call set_status(status, local_status, "pq_train create failed")
+        return
+      end if
+    end if
+
+    call c_f_pointer(vectors%data, vector_data, [int(stride_v, int64) * vector_count])
+    call c_f_pointer(codebook%codebooks%data, codebook_data, &
+      [int(codebook%codebooks%length, int64) * int(codebook%codebooks%dim, int64)])
+
+    do sub_index = 1_int32, m
+      sub_vectors = VectorBlock()
+      sub_centroids = VectorBlock()
+
+      call allocate_aligned(sub_vectors%data, &
+        int(vector_count * int(dsub, int64) * elem_bytes, c_size_t), &
+        int(64, c_size_t), alloc_status)
+      if (alloc_status /= GLAMIN_OK) then
+        call set_status(status, alloc_status, "pq_train alloc failed")
+        return
+      end if
+
+      sub_vectors%length = vector_count
+      sub_vectors%dim = dsub
+      sub_vectors%stride = dsub
+      sub_vectors%elem_size = elem_bytes
+      sub_vectors%alignment = 64
+
+      call c_f_pointer(sub_vectors%data, sub_data, [int(dsub, int64) * vector_count])
+      do vec_index = 1_int64, vector_count
+        vec_offset = (vec_index - 1_int64) * stride_v + int((sub_index - 1_int32) * dsub, int64)
+        dst_offset = (vec_index - 1_int64) * dsub
+        sub_data(dst_offset + 1_int64:dst_offset + dsub) = &
+          vector_data(vec_offset + 1_int64:vec_offset + dsub)
+      end do
+
+      call kmeans_train(sub_vectors, ksub, METRIC_L2, sub_centroids, local_status)
+      if (local_status /= GLAMIN_OK) then
+        call free_aligned(sub_vectors%data, free_status)
+        if (c_associated(sub_centroids%data)) then
+          call free_aligned(sub_centroids%data, free_status)
+        end if
+        call set_status(status, local_status, "pq_train kmeans failed")
+        return
+      end if
+
+      call c_f_pointer(sub_centroids%data, centroid_data, [int(dsub, int64) * ksub])
+      dst_offset = int(sub_index - 1_int32, int64) * int(ksub * dsub, int64)
+      codebook_data(dst_offset + 1_int64:dst_offset + int(ksub * dsub, int64)) = &
+        centroid_data(1_int64:int(ksub * dsub, int64))
+
+      call free_aligned(sub_vectors%data, free_status)
+      call free_aligned(sub_centroids%data, free_status)
+    end do
   end subroutine pq_train
 
-  subroutine pq_encode(codebook, vectors, codes)
+  subroutine pq_encode(codebook, vectors, codes, status)
     type(ProductQuantizerCodebook), intent(in) :: codebook
     type(VectorBlock), intent(in) :: vectors
-    type(VectorBlock), intent(out) :: codes
-    error stop "pq_encode not implemented"
+    type(VectorBlock), intent(inout) :: codes
+    integer(int32), intent(out), optional :: status
+    integer(int32) :: dim
+    integer(int32) :: m
+    integer(int32) :: ksub
+    integer(int32) :: dsub
+    integer(int32) :: stride_v
+    integer(int64) :: vector_count
+    integer(int32) :: elem_bytes
+    integer(int32) :: alloc_status
+    integer(int32) :: free_status
+    integer(int64) :: vec_index
+    integer(int64) :: vec_offset
+    integer(int64) :: code_offset
+    integer(int32) :: sub_index
+    integer(int32) :: centroid_index
+    integer(int32) :: axis_index
+    integer(int32) :: best_label
+    real(real32) :: diff
+    real(real32) :: accum
+    real(real32) :: best_distance
+    real(real32), pointer :: vector_data(:)
+    real(real32), pointer :: codebook_data(:)
+    integer(c_int8_t), pointer :: code_data(:)
+
+    call set_status(status, GLAMIN_OK, "")
+
+    if (.not. c_associated(vectors%data) .or. .not. c_associated(codebook%codebooks%data)) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_encode missing data")
+      return
+    end if
+
+    dim = codebook%dim
+    m = codebook%m
+    ksub = codebook%ksub
+    if (dim <= 0_int32 .or. m <= 0_int32 .or. ksub <= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_encode invalid codebook")
+      return
+    end if
+
+    if (vectors%dim /= dim) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_encode dim mismatch")
+      return
+    end if
+
+    if (mod(dim, m) /= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_encode dim not divisible")
+      return
+    end if
+
+    dsub = dim / m
+    vector_count = vectors%length
+    if (vector_count <= 0_int64) then
+      return
+    end if
+
+    stride_v = vectors%stride
+    if (stride_v <= 0_int32) stride_v = dim
+    if (stride_v < dim) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_encode stride invalid")
+      return
+    end if
+
+    elem_bytes = int(storage_size(0.0_real32) / 8, int32)
+    if (vectors%elem_size /= 0_int32 .and. vectors%elem_size /= elem_bytes) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_encode elem size")
+      return
+    end if
+
+    if (c_associated(codes%data)) then
+      call free_aligned(codes%data, free_status)
+    end if
+
+    call allocate_aligned(codes%data, int(vector_count * int(m, int64), c_size_t), &
+      int(64, c_size_t), alloc_status)
+    if (alloc_status /= GLAMIN_OK) then
+      call set_status(status, alloc_status, "pq_encode alloc failed")
+      return
+    end if
+
+    codes%length = vector_count
+    codes%dim = m
+    codes%stride = m
+    codes%elem_size = 1_int32
+    codes%alignment = 64
+
+    call c_f_pointer(vectors%data, vector_data, [int(stride_v, int64) * vector_count])
+    call c_f_pointer(codebook%codebooks%data, codebook_data, &
+      [int(codebook%codebooks%length, int64) * int(codebook%codebooks%dim, int64)])
+    call c_f_pointer(codes%data, code_data, [vector_count * int(m, int64)])
+
+    do vec_index = 1_int64, vector_count
+      vec_offset = (vec_index - 1_int64) * stride_v
+      code_offset = (vec_index - 1_int64) * int(m, int64)
+      do sub_index = 1_int32, m
+        best_distance = huge(1.0_real32)
+        best_label = 0_int32
+        do centroid_index = 0_int32, ksub - 1_int32
+          accum = 0.0_real32
+          do axis_index = 1_int32, dsub
+            diff = vector_data(vec_offset + int((sub_index - 1_int32) * dsub + axis_index, int64)) - &
+              codebook_data(int(sub_index - 1_int32, int64) * int(ksub * dsub, int64) + &
+                int(centroid_index * dsub + axis_index, int64))
+            accum = accum + diff * diff
+          end do
+          if (accum < best_distance) then
+            best_distance = accum
+            best_label = centroid_index
+          end if
+        end do
+        code_data(code_offset + sub_index) = int(best_label, c_int8_t)
+      end do
+    end do
   end subroutine pq_encode
 
-  subroutine pq_decode(codebook, codes, vectors)
+  subroutine pq_decode(codebook, codes, vectors, status)
     type(ProductQuantizerCodebook), intent(in) :: codebook
     type(VectorBlock), intent(in) :: codes
-    type(VectorBlock), intent(out) :: vectors
-    error stop "pq_decode not implemented"
+    type(VectorBlock), intent(inout) :: vectors
+    integer(int32), intent(out), optional :: status
+    integer(int32) :: dim
+    integer(int32) :: m
+    integer(int32) :: ksub
+    integer(int32) :: dsub
+    integer(int64) :: vector_count
+    integer(int32) :: elem_bytes
+    integer(int32) :: alloc_status
+    integer(int32) :: free_status
+    integer(int64) :: vec_index
+    integer(int64) :: vec_offset
+    integer(int64) :: code_offset
+    integer(int32) :: sub_index
+    integer(int32) :: axis_index
+    integer(int32) :: code_value
+    integer(int64) :: centroid_offset
+    real(real32), pointer :: vector_data(:)
+    real(real32), pointer :: codebook_data(:)
+    integer(c_int8_t), pointer :: code_data(:)
+
+    call set_status(status, GLAMIN_OK, "")
+
+    if (.not. c_associated(codes%data) .or. .not. c_associated(codebook%codebooks%data)) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_decode missing data")
+      return
+    end if
+
+    dim = codebook%dim
+    m = codebook%m
+    ksub = codebook%ksub
+    if (dim <= 0_int32 .or. m <= 0_int32 .or. ksub <= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_decode invalid codebook")
+      return
+    end if
+
+    if (codes%dim /= m) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_decode code dim mismatch")
+      return
+    end if
+
+    if (mod(dim, m) /= 0_int32) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_decode dim not divisible")
+      return
+    end if
+
+    dsub = dim / m
+    vector_count = codes%length
+    if (vector_count <= 0_int64) then
+      return
+    end if
+
+    elem_bytes = int(storage_size(0.0_real32) / 8, int32)
+
+    if (c_associated(vectors%data)) then
+      call free_aligned(vectors%data, free_status)
+    end if
+
+    call allocate_aligned(vectors%data, int(vector_count * int(dim, int64) * elem_bytes, c_size_t), &
+      int(64, c_size_t), alloc_status)
+    if (alloc_status /= GLAMIN_OK) then
+      call set_status(status, alloc_status, "pq_decode alloc failed")
+      return
+    end if
+
+    vectors%length = vector_count
+    vectors%dim = dim
+    vectors%stride = dim
+    vectors%elem_size = elem_bytes
+    vectors%alignment = 64
+
+    call c_f_pointer(vectors%data, vector_data, [int(dim, int64) * vector_count])
+    call c_f_pointer(codebook%codebooks%data, codebook_data, &
+      [int(codebook%codebooks%length, int64) * int(codebook%codebooks%dim, int64)])
+    call c_f_pointer(codes%data, code_data, [vector_count * int(m, int64)])
+
+    do vec_index = 1_int64, vector_count
+      vec_offset = (vec_index - 1_int64) * dim
+      code_offset = (vec_index - 1_int64) * int(m, int64)
+      do sub_index = 1_int32, m
+        code_value = int(code_data(code_offset + sub_index), int32)
+        if (code_value < 0_int32) code_value = code_value + 256_int32
+        if (code_value >= ksub) then
+          call set_status(status, GLAMIN_ERR_INVALID_ARG, "pq_decode code out of range")
+          return
+        end if
+        centroid_offset = int(sub_index - 1_int32, int64) * int(ksub * dsub, int64) + &
+          int(code_value * dsub, int64)
+        do axis_index = 1_int32, dsub
+          vector_data(vec_offset + int((sub_index - 1_int32) * dsub + axis_index, int64)) = &
+            codebook_data(centroid_offset + axis_index)
+        end do
+      end do
+    end do
   end subroutine pq_decode
+
+  subroutine set_status(status, code, message)
+    integer(int32), intent(out), optional :: status
+    integer(int32), intent(in) :: code
+    character(len=*), intent(in) :: message
+
+    if (present(status)) then
+      status = code
+    else if (code /= GLAMIN_OK) then
+      error stop message
+    end if
+  end subroutine set_status
 
   subroutine update_top_k(distance, label, use_l2, top_distances, top_labels)
     real(real32), intent(in) :: distance

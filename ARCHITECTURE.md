@@ -34,6 +34,7 @@
   - `mod_worker_pool.f90`: worker pool control and lifecycle
   - `thread_pool.c`: pthread-backed job execution
 - `src/kernels`
+  - `mod_kmeans.f90`: lightweight k-means training
   - `mod_distance.f90`: L2/IP kernels and batch primitives
 - `src/index`
   - `mod_flat.f90`, `mod_ivf.f90`, `mod_pq.f90`, `mod_ivfpq.f90`, `mod_hnsw.f90`

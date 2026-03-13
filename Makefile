@@ -27,6 +27,7 @@ F90_SOURCES = \
   src/runtime/mod_queue.f90 \
   src/runtime/mod_worker_pool.f90 \
   src/index/mod_flat.f90 \
+  src/kernels/mod_kmeans.f90 \
   src/kernels/mod_distance.f90 \
   src/index/mod_ivf.f90 \
   src/index/mod_pq.f90 \

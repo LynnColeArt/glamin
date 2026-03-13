@@ -28,8 +28,8 @@
 ## Phase 3: Core Indices
 - [x] Flat index with async search and add.
 - [x] PQ add/search primitives (nbits=8, codebooks required).
-- [ ] IVF index with coarse quantizer.
-- [ ] PQ training/encode/decode.
+- [x] IVF index with coarse quantizer.
+- [x] PQ training/encode/decode.
 - [ ] IVFPQ composition.
 
 ## Phase 4: HNSW
