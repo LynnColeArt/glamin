@@ -2,12 +2,13 @@ module glamin_async
   use iso_fortran_env, only: int32, int64
   use iso_c_binding, only: c_associated, c_f_pointer, c_loc, c_null_ptr, c_ptr, c_int32_t, c_int64_t
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_OOM, &
-    GLAMIN_ERR_NOT_READY, GLAMIN_ERR_UNKNOWN
+    GLAMIN_ERR_NOT_READY
   use glamin_status, only: REQUEST_PENDING, REQUEST_RUNNING, REQUEST_COMPLETED, REQUEST_CANCELLED, &
     REQUEST_FAILED
   use glamin_types, only: Request, VectorBlock, SearchPlan, IndexHandle
   use glamin_geometry_loader, only: load_flat_from_layout
   use glamin_index_flat, only: flat_add, flat_search
+  use glamin_pipeline, only: run_pipeline
   use glamin_worker_pool, only: WorkerPool, JobCallback, submit_request_job_with_callback
   implicit none
   private
@@ -39,7 +40,6 @@ module glamin_async
 
   integer, parameter :: LOAD_PATH_LEN = 256
   integer, parameter :: LOAD_SPACE_LEN = 64
-  integer, parameter :: PIPELINE_CMD_LEN = 512
   character(len=11), parameter :: DEFAULT_SPEC_OUT = 'build/specs'
 
   type :: RequestPayload
@@ -698,7 +698,6 @@ contains
     character(len=LOAD_PATH_LEN) :: layout_path
     character(len=LOAD_PATH_LEN) :: vectors_path
     character(len=LOAD_SPACE_LEN) :: space_id
-    character(len=PIPELINE_CMD_LEN) :: command
     integer(int32) :: metric
     type(IndexHandle) :: index
     integer(int32) :: status
@@ -713,8 +712,7 @@ contains
       return
     end if
 
-    call build_pipeline_command(spec_path, out_dir, command)
-    call run_command(command, status)
+    call run_pipeline(trim(spec_path), trim(out_dir), status)
     if (status /= GLAMIN_OK) then
       call mark_request_failed(request_id, status)
       return
@@ -739,32 +737,6 @@ contains
     request_error(request_id) = error_code
     request_status(request_id) = REQUEST_FAILED
   end subroutine mark_request_failed
-
-  subroutine run_command(command, status)
-    character(len=*), intent(in) :: command
-    integer(int32), intent(out) :: status
-    integer :: exitstat
-    integer :: cmdstat
-
-    exitstat = 0
-    cmdstat = 0
-    call execute_command_line(trim(command), wait=.true., exitstat=exitstat, cmdstat=cmdstat)
-
-    if (cmdstat /= 0 .or. exitstat /= 0) then
-      status = GLAMIN_ERR_UNKNOWN
-    else
-      status = GLAMIN_OK
-    end if
-  end subroutine run_command
-
-  subroutine build_pipeline_command(spec_path, out_dir, command)
-    character(len=*), intent(in) :: spec_path
-    character(len=*), intent(in) :: out_dir
-    character(len=*), intent(out) :: command
-
-    command = 'make spec-embed SPEC="' // trim(spec_path) // '" SPEC_OUT="' // &
-      trim(out_dir) // '"'
-  end subroutine build_pipeline_command
 
   subroutine build_pipeline_paths(out_dir, layout_path, vectors_path)
     character(len=*), intent(in) :: out_dir
