@@ -27,8 +27,6 @@ F90_SOURCES = \
   src/runtime/mod_queue.f90 \
   src/runtime/mod_worker_pool.f90 \
   src/index/mod_flat.f90 \
-  src/runtime/mod_async.f90 \
-  src/runtime/mod_runtime.f90 \
   src/kernels/mod_distance.f90 \
   src/index/mod_ivf.f90 \
   src/index/mod_pq.f90 \
@@ -39,6 +37,8 @@ F90_SOURCES = \
   src/io/mod_geometry_layout.f90 \
   src/io/mod_geometry_loader.f90 \
   src/io/mod_faiss_io.f90 \
+  src/runtime/mod_async.f90 \
+  src/runtime/mod_runtime.f90 \
   src/gpu/mod_gpu_backend.f90
 
 C_SOURCES = \

@@ -129,6 +129,14 @@ gfortran -std=f2018 -Ibuild/mod -o build/geometry_loader_demo \
 ./build/geometry_loader_demo
 ```
 
+Run the async loader demo:
+
+```
+gfortran -std=f2018 -Ibuild/mod -o build/async_geometry_loader_demo \
+  examples/async_geometry_loader_demo.f90 build/libglamin.a
+./build/async_geometry_loader_demo
+```
+
 Note: quote version strings and timestamps to avoid YAML coercion.
 
 ---

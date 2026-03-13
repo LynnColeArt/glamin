@@ -6,6 +6,7 @@ module glamin_async
   use glamin_status, only: REQUEST_PENDING, REQUEST_RUNNING, REQUEST_COMPLETED, REQUEST_CANCELLED, &
     REQUEST_FAILED
   use glamin_types, only: Request, VectorBlock, SearchPlan, IndexHandle
+  use glamin_geometry_loader, only: load_flat_from_layout
   use glamin_index_flat, only: flat_add, flat_search
   use glamin_worker_pool, only: WorkerPool, JobCallback, submit_request_job_with_callback
   implicit none
@@ -14,11 +15,13 @@ module glamin_async
   public :: submit_search
   public :: submit_add
   public :: submit_train
+  public :: submit_load_flat
   public :: poll_request
   public :: wait_request
   public :: cancel_request
   public :: schedule_request
   public :: get_search_results
+  public :: get_loaded_index
 
   type :: RequestContext
     integer(int64) :: request_id = 0
@@ -29,7 +32,11 @@ module glamin_async
     enumerator :: REQUEST_KIND_SEARCH = 1
     enumerator :: REQUEST_KIND_ADD = 2
     enumerator :: REQUEST_KIND_TRAIN = 3
+    enumerator :: REQUEST_KIND_LOAD = 4
   end enum
+
+  integer, parameter :: LOAD_PATH_LEN = 256
+  integer, parameter :: LOAD_SPACE_LEN = 64
 
   type :: RequestPayload
     integer(int32) :: kind = REQUEST_KIND_NONE
@@ -39,6 +46,10 @@ module glamin_async
     type(VectorBlock) :: vectors
     type(VectorBlock) :: distances
     type(VectorBlock) :: labels
+    character(len=LOAD_PATH_LEN) :: layout_path = ''
+    character(len=LOAD_PATH_LEN) :: vectors_path = ''
+    character(len=LOAD_SPACE_LEN) :: space_id = ''
+    integer(int32) :: metric = 0
   end type RequestPayload
 
   integer(int64), save :: next_request_id = 1_int64
@@ -92,6 +103,20 @@ contains
       call set_payload_vectors(request_handle%id, index, vectors, REQUEST_KIND_TRAIN)
     end if
   end subroutine submit_train
+
+  subroutine submit_load_flat(layout_path, vectors_path, space_id, metric, request_handle)
+    character(len=*), intent(in) :: layout_path
+    character(len=*), intent(in) :: vectors_path
+    character(len=*), intent(in) :: space_id
+    integer(int32), intent(in) :: metric
+    type(Request), intent(out) :: request_handle
+    integer(int32) :: status
+
+    call register_request(request_handle, status)
+    if (status == GLAMIN_OK) then
+      call set_payload_load(request_handle%id, layout_path, vectors_path, space_id, metric)
+    end if
+  end subroutine submit_load_flat
 
   subroutine poll_request(request_handle, status)
     type(Request), intent(inout) :: request_handle
@@ -216,6 +241,31 @@ contains
     labels = request_payload(request_handle%id)%labels
     status = GLAMIN_OK
   end subroutine get_search_results
+
+  subroutine get_loaded_index(request_handle, index, status)
+    type(Request), intent(in) :: request_handle
+    type(IndexHandle), intent(out) :: index
+    integer(int32), intent(out) :: status
+
+    index = IndexHandle()
+    if (.not. is_valid_request(request_handle%id)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (request_status(request_handle%id) /= REQUEST_COMPLETED) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    if (request_payload(request_handle%id)%kind /= REQUEST_KIND_LOAD) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    index = request_payload(request_handle%id)%index
+    status = GLAMIN_OK
+  end subroutine get_loaded_index
 
   subroutine glamin_mark_request_status(request_id, status_code, error_code) &
     bind(c, name="glamin_mark_request_status")
@@ -438,6 +488,27 @@ contains
     request_payload(payload_index)%vectors = vectors
   end subroutine set_payload_vectors
 
+  subroutine set_payload_load(request_id, layout_path, vectors_path, space_id, metric)
+    integer(int64), intent(in) :: request_id
+    character(len=*), intent(in) :: layout_path
+    character(len=*), intent(in) :: vectors_path
+    character(len=*), intent(in) :: space_id
+    integer(int32), intent(in) :: metric
+    integer(int32) :: payload_index
+
+    payload_index = int(request_id, int32)
+    if (payload_index <= 0_int32) then
+      return
+    end if
+
+    request_payload(payload_index)%kind = REQUEST_KIND_LOAD
+    request_payload(payload_index)%layout_path = trim(layout_path)
+    request_payload(payload_index)%vectors_path = trim(vectors_path)
+    request_payload(payload_index)%space_id = trim(space_id)
+    request_payload(payload_index)%metric = metric
+    request_payload(payload_index)%index = IndexHandle()
+  end subroutine set_payload_load
+
   subroutine ensure_context_capacity(request_id, status)
     integer(int64), intent(in) :: request_id
     integer(int32), intent(out) :: status
@@ -477,6 +548,8 @@ contains
       call execute_add(request_id)
     case (REQUEST_KIND_TRAIN)
       call execute_train(request_id)
+    case (REQUEST_KIND_LOAD)
+      call execute_load(request_id)
     case default
       call mark_request_failed(request_id, GLAMIN_ERR_INVALID_ARG)
     end select
@@ -542,6 +615,31 @@ contains
 
     request_error(request_id) = GLAMIN_OK
   end subroutine execute_train
+
+  subroutine execute_load(request_id)
+    integer(int64), intent(in) :: request_id
+    character(len=LOAD_PATH_LEN) :: layout_path
+    character(len=LOAD_PATH_LEN) :: vectors_path
+    character(len=LOAD_SPACE_LEN) :: space_id
+    integer(int32) :: metric
+    type(IndexHandle) :: index
+    integer(int32) :: status
+
+    layout_path = request_payload(request_id)%layout_path
+    vectors_path = request_payload(request_id)%vectors_path
+    space_id = request_payload(request_id)%space_id
+    metric = request_payload(request_id)%metric
+
+    call load_flat_from_layout(trim(layout_path), trim(vectors_path), trim(space_id), metric, &
+      index, status)
+    if (status /= GLAMIN_OK) then
+      call mark_request_failed(request_id, status)
+      return
+    end if
+
+    request_payload(request_id)%index = index
+    request_error(request_id) = GLAMIN_OK
+  end subroutine execute_load
 
   subroutine mark_request_failed(request_id, error_code)
     integer(int64), intent(in) :: request_id
