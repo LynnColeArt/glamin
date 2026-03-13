@@ -1,14 +1,125 @@
 module glamin_contracts
   use iso_fortran_env, only: int32, int64
-  use glamin_embedder, only: EmbedderContract
-  use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG
+  use iso_c_binding, only: c_associated, c_char, c_f_procpointer, c_funptr, c_int32_t, &
+    c_loc, c_null_char, c_null_funptr, c_ptr
+  use glamin_embedder, only: EmbedderContract, EmbedderSpec
+  use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_NOT_READY
   implicit none
   private
 
   public :: load_embedder_contract
   public :: validate_embedder_contract
+  public :: ContractValidators
+  public :: set_contract_validators
+  public :: clear_contract_validators
+  public :: set_contract_validators_c
+  public :: clear_contract_validators_c
+
+  abstract interface
+    subroutine embedder_hash_validator_iface(spec, contract_hash, status)
+      import :: EmbedderSpec, int32
+      type(EmbedderSpec), intent(in) :: spec
+      character(len=*), intent(in) :: contract_hash
+      integer(int32), intent(out) :: status
+    end subroutine embedder_hash_validator_iface
+  end interface
+
+  abstract interface
+    subroutine embedder_signature_validator_iface(spec, contract_hash, signature, status)
+      import :: EmbedderSpec, int32
+      type(EmbedderSpec), intent(in) :: spec
+      character(len=*), intent(in) :: contract_hash
+      character(len=*), intent(in) :: signature
+      integer(int32), intent(out) :: status
+    end subroutine embedder_signature_validator_iface
+  end interface
+
+  abstract interface
+    subroutine embedder_hash_validator_c(embedder_id, embedder_version, input_schema, &
+        preprocess_chain, model_hash, config_hash, hardware_class, min_ram_mb, min_vram_mb, &
+        contract_hash, status) bind(c)
+      import :: c_ptr, c_int32_t
+      type(c_ptr), value :: embedder_id
+      type(c_ptr), value :: embedder_version
+      type(c_ptr), value :: input_schema
+      type(c_ptr), value :: preprocess_chain
+      type(c_ptr), value :: model_hash
+      type(c_ptr), value :: config_hash
+      type(c_ptr), value :: hardware_class
+      integer(c_int32_t), value :: min_ram_mb
+      integer(c_int32_t), value :: min_vram_mb
+      type(c_ptr), value :: contract_hash
+      integer(c_int32_t) :: status
+    end subroutine embedder_hash_validator_c
+  end interface
+
+  abstract interface
+    subroutine embedder_signature_validator_c(embedder_id, embedder_version, input_schema, &
+        preprocess_chain, model_hash, config_hash, hardware_class, min_ram_mb, min_vram_mb, &
+        contract_hash, signature, status) bind(c)
+      import :: c_ptr, c_int32_t
+      type(c_ptr), value :: embedder_id
+      type(c_ptr), value :: embedder_version
+      type(c_ptr), value :: input_schema
+      type(c_ptr), value :: preprocess_chain
+      type(c_ptr), value :: model_hash
+      type(c_ptr), value :: config_hash
+      type(c_ptr), value :: hardware_class
+      integer(c_int32_t), value :: min_ram_mb
+      integer(c_int32_t), value :: min_vram_mb
+      type(c_ptr), value :: contract_hash
+      type(c_ptr), value :: signature
+      integer(c_int32_t) :: status
+    end subroutine embedder_signature_validator_c
+  end interface
+
+  type :: ContractValidators
+    procedure(embedder_hash_validator_iface), pointer, nopass :: hash => null()
+    procedure(embedder_signature_validator_iface), pointer, nopass :: signature => null()
+  end type ContractValidators
+
+  type(ContractValidators), save :: validators = ContractValidators()
+  type(c_funptr), save :: hash_validator_c = c_null_funptr
+  type(c_funptr), save :: signature_validator_c = c_null_funptr
 
 contains
+  subroutine set_contract_validators(new_validators)
+    type(ContractValidators), intent(in) :: new_validators
+
+    validators = new_validators
+  end subroutine set_contract_validators
+
+  subroutine clear_contract_validators()
+    type(ContractValidators) :: empty_validators
+
+    nullify(empty_validators%hash)
+    nullify(empty_validators%signature)
+    validators = empty_validators
+  end subroutine clear_contract_validators
+
+  subroutine set_contract_validators_c(hash_cb, signature_cb) bind(c, name="glamin_set_contract_validators")
+    type(c_funptr), value :: hash_cb
+    type(c_funptr), value :: signature_cb
+    type(ContractValidators) :: new_validators
+
+    hash_validator_c = hash_cb
+    signature_validator_c = signature_cb
+
+    nullify(new_validators%hash)
+    nullify(new_validators%signature)
+
+    if (c_associated(hash_cb)) new_validators%hash => hash_validator_bridge
+    if (c_associated(signature_cb)) new_validators%signature => signature_validator_bridge
+
+    call set_contract_validators(new_validators)
+  end subroutine set_contract_validators_c
+
+  subroutine clear_contract_validators_c() bind(c, name="glamin_clear_contract_validators")
+    hash_validator_c = c_null_funptr
+    signature_validator_c = c_null_funptr
+    call clear_contract_validators()
+  end subroutine clear_contract_validators_c
+
   subroutine load_embedder_contract(path, contract, status)
     character(len=*), intent(in) :: path
     type(EmbedderContract), intent(out) :: contract
@@ -82,6 +193,12 @@ contains
     if (len_trim(contract%contract_hash) == 0) status = GLAMIN_ERR_INVALID_ARG
     if (contract%spec%min_ram_mb < 0_int32) status = GLAMIN_ERR_INVALID_ARG
     if (contract%spec%min_vram_mb < 0_int32) status = GLAMIN_ERR_INVALID_ARG
+    if (status /= GLAMIN_OK) return
+
+    call validate_hash_hook(contract, status)
+    if (status /= GLAMIN_OK) return
+
+    call validate_signature_hook(contract, status)
   end subroutine validate_embedder_contract
 
   subroutine read_text_file(path, content, status)
@@ -276,6 +393,156 @@ contains
       found = .true.
     end if
   end subroutine extract_string_array
+
+  subroutine validate_hash_hook(contract, status)
+    type(EmbedderContract), intent(in) :: contract
+    integer(int32), intent(out) :: status
+
+    if (associated(validators%hash)) then
+      call validators%hash(contract%spec, contract%contract_hash, status)
+    else
+      status = GLAMIN_OK
+    end if
+  end subroutine validate_hash_hook
+
+  subroutine validate_signature_hook(contract, status)
+    type(EmbedderContract), intent(in) :: contract
+    integer(int32), intent(out) :: status
+
+    if (.not. associated(validators%signature)) then
+      status = GLAMIN_OK
+      return
+    end if
+
+    if (len_trim(contract%signature) == 0) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    call validators%signature(contract%spec, contract%contract_hash, contract%signature, status)
+  end subroutine validate_signature_hook
+
+  subroutine hash_validator_bridge(spec, contract_hash, status)
+    type(EmbedderSpec), intent(in) :: spec
+    character(len=*), intent(in) :: contract_hash
+    integer(int32), intent(out) :: status
+
+    call dispatch_hash_callback(hash_validator_c, spec, contract_hash, status)
+  end subroutine hash_validator_bridge
+
+  subroutine signature_validator_bridge(spec, contract_hash, signature, status)
+    type(EmbedderSpec), intent(in) :: spec
+    character(len=*), intent(in) :: contract_hash
+    character(len=*), intent(in) :: signature
+    integer(int32), intent(out) :: status
+
+    call dispatch_signature_callback(signature_validator_c, spec, contract_hash, signature, status)
+  end subroutine signature_validator_bridge
+
+  subroutine dispatch_hash_callback(callback, spec, contract_hash, status)
+    type(c_funptr), intent(in) :: callback
+    type(EmbedderSpec), intent(in) :: spec
+    character(len=*), intent(in) :: contract_hash
+    integer(int32), intent(out) :: status
+    procedure(embedder_hash_validator_c), pointer :: cb
+    character(kind=c_char), allocatable, target :: id_c(:)
+    character(kind=c_char), allocatable, target :: version_c(:)
+    character(kind=c_char), allocatable, target :: schema_c(:)
+    character(kind=c_char), allocatable, target :: chain_c(:)
+    character(kind=c_char), allocatable, target :: model_c(:)
+    character(kind=c_char), allocatable, target :: config_c(:)
+    character(kind=c_char), allocatable, target :: hardware_c(:)
+    character(kind=c_char), allocatable, target :: hash_c(:)
+    integer(c_int32_t) :: c_status
+
+    if (.not. c_associated(callback)) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    call c_f_procpointer(callback, cb)
+    if (.not. associated(cb)) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    call to_c_string(spec%embedder_id, id_c)
+    call to_c_string(spec%embedder_version, version_c)
+    call to_c_string(spec%input_schema, schema_c)
+    call to_c_string(spec%preprocess_chain, chain_c)
+    call to_c_string(spec%model_hash, model_c)
+    call to_c_string(spec%config_hash, config_c)
+    call to_c_string(spec%hardware_class, hardware_c)
+    call to_c_string(contract_hash, hash_c)
+
+    c_status = 0_c_int32_t
+    call cb(c_loc(id_c(1)), c_loc(version_c(1)), c_loc(schema_c(1)), c_loc(chain_c(1)), &
+      c_loc(model_c(1)), c_loc(config_c(1)), c_loc(hardware_c(1)), &
+      int(spec%min_ram_mb, c_int32_t), int(spec%min_vram_mb, c_int32_t), c_loc(hash_c(1)), &
+      c_status)
+    status = int(c_status, int32)
+  end subroutine dispatch_hash_callback
+
+  subroutine dispatch_signature_callback(callback, spec, contract_hash, signature, status)
+    type(c_funptr), intent(in) :: callback
+    type(EmbedderSpec), intent(in) :: spec
+    character(len=*), intent(in) :: contract_hash
+    character(len=*), intent(in) :: signature
+    integer(int32), intent(out) :: status
+    procedure(embedder_signature_validator_c), pointer :: cb
+    character(kind=c_char), allocatable, target :: id_c(:)
+    character(kind=c_char), allocatable, target :: version_c(:)
+    character(kind=c_char), allocatable, target :: schema_c(:)
+    character(kind=c_char), allocatable, target :: chain_c(:)
+    character(kind=c_char), allocatable, target :: model_c(:)
+    character(kind=c_char), allocatable, target :: config_c(:)
+    character(kind=c_char), allocatable, target :: hardware_c(:)
+    character(kind=c_char), allocatable, target :: hash_c(:)
+    character(kind=c_char), allocatable, target :: signature_c(:)
+    integer(c_int32_t) :: c_status
+
+    if (.not. c_associated(callback)) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    call c_f_procpointer(callback, cb)
+    if (.not. associated(cb)) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    call to_c_string(spec%embedder_id, id_c)
+    call to_c_string(spec%embedder_version, version_c)
+    call to_c_string(spec%input_schema, schema_c)
+    call to_c_string(spec%preprocess_chain, chain_c)
+    call to_c_string(spec%model_hash, model_c)
+    call to_c_string(spec%config_hash, config_c)
+    call to_c_string(spec%hardware_class, hardware_c)
+    call to_c_string(contract_hash, hash_c)
+    call to_c_string(signature, signature_c)
+
+    c_status = 0_c_int32_t
+    call cb(c_loc(id_c(1)), c_loc(version_c(1)), c_loc(schema_c(1)), c_loc(chain_c(1)), &
+      c_loc(model_c(1)), c_loc(config_c(1)), c_loc(hardware_c(1)), &
+      int(spec%min_ram_mb, c_int32_t), int(spec%min_vram_mb, c_int32_t), c_loc(hash_c(1)), &
+      c_loc(signature_c(1)), c_status)
+    status = int(c_status, int32)
+  end subroutine dispatch_signature_callback
+
+  subroutine to_c_string(input, output)
+    character(len=*), intent(in) :: input
+    character(kind=c_char), allocatable, intent(out) :: output(:)
+    integer :: length
+    integer :: idx
+
+    length = len_trim(input)
+    allocate(output(length + 1))
+    do idx = 1, length
+      output(idx) = achar(iachar(input(idx:idx)), kind=c_char)
+    end do
+    output(length + 1) = c_null_char
+  end subroutine to_c_string
 
   subroutine skip_whitespace(content, idx)
     character(len=*), intent(in) :: content

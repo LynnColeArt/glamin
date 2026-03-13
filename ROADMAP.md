@@ -17,7 +17,7 @@
 - [x] Define embedder contract schema and validation.
 - [x] Attach embedder contract to write path (reject mismatches).
 - [x] CPU-only reference embedder (bag-of-words baseline).
-- [ ] Embedder contract signing and hash verification hooks.
+- [x] Embedder contract signing and hash verification hooks.
 
 ## Phase 2.6: Geometry Spec Tooling
 - [x] Schema validator + canonicalizer for `geometry_spec.yaml`.

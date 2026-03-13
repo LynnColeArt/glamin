@@ -154,6 +154,9 @@ See `examples/async_geometry_pipeline_demo.f90` for the callback wiring.
 External runtimes can register C callbacks via `glamin_set_pipeline_callbacks`.
 See `include/glamin_pipeline.h` and `examples/pipeline_callbacks_demo.c` for a minimal stub.
 
+Contract validation hooks are available via `glamin_set_contract_validators`.
+See `include/glamin_contracts.h` for the C callback signatures.
+
 Run the C-driven pipeline demo (C registers callbacks, Fortran runs the pipeline):
 
 ```
