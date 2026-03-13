@@ -1,19 +1,6 @@
-#include <stdint.h>
 #include <stdio.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void glamin_set_pipeline_callbacks(
-    void (*compile_cb)(const char *spec_path, const char *out_dir, int32_t *status),
-    void (*embed_cb)(const char *spec_path, const char *out_dir, int32_t *status));
-
-void glamin_clear_pipeline_callbacks(void);
-
-#ifdef __cplusplus
-}
-#endif
+#include "glamin_pipeline.h"
 
 static void pipeline_compile(const char *spec_path, const char *out_dir, int32_t *status) {
   printf("[compile] spec=%s out=%s\n", spec_path, out_dir);
