@@ -27,7 +27,7 @@
   - `mod_status.f90`: request status enumerations
   - `mod_memory.f90`: aligned allocation and memory utilities
 - `src/runtime`
-  - `mod_pipeline.f90`: pipeline callbacks for compile/embed
+  - `mod_pipeline.f90`: pipeline callbacks for compile/embed (Fortran + C ABI)
   - `mod_async.f90`: request lifecycle APIs
   - `mod_queue.f90`: job queue implementation
   - `mod_runtime.f90`: runtime context and submission helpers

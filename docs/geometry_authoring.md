@@ -147,6 +147,7 @@ gfortran -std=f2018 -Ibuild/mod -o build/async_geometry_pipeline_demo \
 
 The pipeline uses Fortran callbacks registered through `glamin_pipeline`.
 See `examples/async_geometry_pipeline_demo.f90` for the callback wiring.
+External runtimes can register C callbacks via `glamin_set_pipeline_callbacks`.
 
 Note: quote version strings and timestamps to avoid YAML coercion.
 
