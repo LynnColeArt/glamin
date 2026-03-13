@@ -697,6 +697,7 @@ contains
     character(len=LOAD_PATH_LEN) :: out_dir
     character(len=LOAD_PATH_LEN) :: layout_path
     character(len=LOAD_PATH_LEN) :: vectors_path
+    character(len=LOAD_PATH_LEN) :: contracts_path
     character(len=LOAD_SPACE_LEN) :: space_id
     integer(int32) :: metric
     type(IndexHandle) :: index
@@ -718,9 +719,9 @@ contains
       return
     end if
 
-    call build_pipeline_paths(out_dir, layout_path, vectors_path)
+    call build_pipeline_paths(out_dir, layout_path, vectors_path, contracts_path)
     call load_flat_from_layout(trim(layout_path), trim(vectors_path), trim(space_id), metric, &
-      index, status)
+      index, status, trim(contracts_path))
     if (status /= GLAMIN_OK) then
       call mark_request_failed(request_id, status)
       return
@@ -738,10 +739,11 @@ contains
     request_status(request_id) = REQUEST_FAILED
   end subroutine mark_request_failed
 
-  subroutine build_pipeline_paths(out_dir, layout_path, vectors_path)
+  subroutine build_pipeline_paths(out_dir, layout_path, vectors_path, contracts_path)
     character(len=*), intent(in) :: out_dir
     character(len=*), intent(out) :: layout_path
     character(len=*), intent(out) :: vectors_path
+    character(len=*), intent(out), optional :: contracts_path
     integer :: root_len
     character(len=LOAD_PATH_LEN) :: root
 
@@ -750,15 +752,24 @@ contains
     if (root_len == 0) then
       layout_path = 'vector_layout.json'
       vectors_path = 'vectors.bin'
+      if (present(contracts_path)) then
+        contracts_path = 'contracts.json'
+      end if
       return
     end if
 
     if (root(root_len:root_len) == '/') then
       layout_path = trim(root) // 'vector_layout.json'
       vectors_path = trim(root) // 'vectors.bin'
+      if (present(contracts_path)) then
+        contracts_path = trim(root) // 'contracts.json'
+      end if
     else
       layout_path = trim(root) // '/vector_layout.json'
       vectors_path = trim(root) // '/vectors.bin'
+      if (present(contracts_path)) then
+        contracts_path = trim(root) // '/contracts.json'
+      end if
     end if
   end subroutine build_pipeline_paths
 end module glamin_async

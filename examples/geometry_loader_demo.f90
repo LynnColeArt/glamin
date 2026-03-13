@@ -39,7 +39,7 @@ program geometry_loader_demo
   query_block%alignment = 0
 
   call load_flat_from_layout("build/specs/vector_layout.json", "build/specs/vectors.bin", &
-    "geometry.auth", METRIC_L2, index, status)
+    "geometry.auth", METRIC_L2, index, status, "build/specs/contracts.json")
   if (status /= GLAMIN_OK) then
     error stop "load_flat_from_layout failed"
   end if

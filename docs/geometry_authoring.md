@@ -129,6 +129,8 @@ gfortran -std=f2018 -Ibuild/mod -o build/geometry_loader_demo \
 ./build/geometry_loader_demo
 ```
 
+The loader checks `contracts.json` when provided and rejects missing embedder metadata.
+
 Run the async loader demo:
 
 ```

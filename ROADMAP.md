@@ -14,8 +14,8 @@
 - [x] Implement L2/IP kernels (scalar baseline; AVX2 pending).
 
 ## Phase 2.5: Embedder Contracts
-- [ ] Define embedder contract schema and validation.
-- [ ] Attach embedder contract to write path (reject mismatches).
+- [x] Define embedder contract schema and validation.
+- [x] Attach embedder contract to write path (reject mismatches).
 - [x] CPU-only reference embedder (bag-of-words baseline).
 - [ ] Embedder contract signing and hash verification hooks.
 
