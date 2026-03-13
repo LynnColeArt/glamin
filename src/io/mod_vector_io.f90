@@ -3,7 +3,7 @@ module glamin_vector_io
   use iso_c_binding, only: c_associated, c_null_ptr, c_ptr
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG
   use glamin_memory, only: free_aligned
-  use glamin_stream, only: IoStream, open_stream, close_stream, read_bytes
+  use glamin_stream, only: IoStream, open_stream, close_stream, read_bytes, stream_seek
   use glamin_types, only: VectorBlock
   implicit none
   private

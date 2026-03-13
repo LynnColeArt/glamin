@@ -121,6 +121,14 @@ Render a DOT graph:
 build/venv/bin/python tools/geometry_spec_visualize.py docs/geometry_spec.yaml --output build/specs/spec.dot
 ```
 
+Run the loader demo (after building + generating specs):
+
+```
+gfortran -std=f2018 -Ibuild/mod -o build/geometry_loader_demo \
+  examples/geometry_loader_demo.f90 build/libglamin.a
+./build/geometry_loader_demo
+```
+
 Note: quote version strings and timestamps to avoid YAML coercion.
 
 ---

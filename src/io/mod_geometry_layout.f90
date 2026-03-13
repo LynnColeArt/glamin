@@ -15,8 +15,8 @@ contains
     integer(int64), intent(out) :: offset_bytes
     integer(int32), intent(out) :: status
     character(len=:), allocatable :: content
-    character(len=:), allocatable :: pattern
-    integer :: space_pos
+    integer :: obj_start
+    integer :: obj_end
     logical :: found
     integer(int64) :: temp_value
 
@@ -30,34 +30,80 @@ contains
       return
     end if
 
-    pattern = '"space_id": "' // trim(space_id) // '"'
-    space_pos = index(content, pattern)
-    if (space_pos == 0) then
+    call find_space_object(content, space_id, obj_start, obj_end, found)
+    if (.not. found) then
       status = GLAMIN_ERR_INVALID_ARG
       return
     end if
 
-    call extract_int(content, '"dim"', space_pos, temp_value, found)
+    call extract_int(content(obj_start:obj_end), '"dim"', 1, temp_value, found)
     if (.not. found) then
       status = GLAMIN_ERR_INVALID_ARG
       return
     end if
     dim = int(temp_value, int32)
 
-    call extract_int(content, '"count"', space_pos, temp_value, found)
+    call extract_int(content(obj_start:obj_end), '"count"', 1, temp_value, found)
     if (.not. found) then
       status = GLAMIN_ERR_INVALID_ARG
       return
     end if
     count = temp_value
 
-    call extract_int(content, '"offset_bytes"', space_pos, temp_value, found)
+    call extract_int(content(obj_start:obj_end), '"offset_bytes"', 1, temp_value, found)
     if (.not. found) then
       status = GLAMIN_ERR_INVALID_ARG
       return
     end if
     offset_bytes = temp_value
   end subroutine load_vector_layout
+
+  subroutine find_space_object(content, space_id, obj_start, obj_end, found)
+    character(len=*), intent(in) :: content
+    character(len=*), intent(in) :: space_id
+    integer, intent(out) :: obj_start
+    integer, intent(out) :: obj_end
+    logical, intent(out) :: found
+    character(len=:), allocatable :: pattern
+    integer :: spaces_pos
+    integer :: array_pos
+    integer :: idx
+    integer :: depth
+
+    obj_start = 0
+    obj_end = 0
+    found = .false.
+
+    spaces_pos = index(content, '"spaces"')
+    if (spaces_pos == 0) return
+
+    array_pos = index(content(spaces_pos:), '[')
+    if (array_pos == 0) return
+    array_pos = spaces_pos + array_pos - 1
+
+    pattern = '"space_id": "' // trim(space_id) // '"'
+    depth = 0
+
+    do idx = array_pos, len(content)
+      select case (content(idx:idx))
+      case ('{')
+        if (depth == 0) obj_start = idx
+        depth = depth + 1
+      case ('}')
+        if (depth > 0) depth = depth - 1
+        if (depth == 0 .and. obj_start > 0) then
+          obj_end = idx
+          if (index(content(obj_start:obj_end), pattern) > 0) then
+            found = .true.
+            return
+          end if
+          obj_start = 0
+          obj_end = 0
+        end if
+      case default
+      end select
+    end do
+  end subroutine find_space_object
 
   subroutine read_text_file(path, content, status)
     character(len=*), intent(in) :: path
