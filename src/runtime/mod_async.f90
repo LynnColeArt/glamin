@@ -2,7 +2,7 @@ module glamin_async
   use iso_fortran_env, only: int32, int64
   use iso_c_binding, only: c_associated, c_f_pointer, c_loc, c_null_ptr, c_ptr, c_int32_t, c_int64_t
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_OOM, &
-    GLAMIN_ERR_NOT_READY
+    GLAMIN_ERR_NOT_READY, GLAMIN_ERR_UNKNOWN
   use glamin_status, only: REQUEST_PENDING, REQUEST_RUNNING, REQUEST_COMPLETED, REQUEST_CANCELLED, &
     REQUEST_FAILED
   use glamin_types, only: Request, VectorBlock, SearchPlan, IndexHandle
@@ -16,6 +16,7 @@ module glamin_async
   public :: submit_add
   public :: submit_train
   public :: submit_load_flat
+  public :: submit_pipeline
   public :: poll_request
   public :: wait_request
   public :: cancel_request
@@ -33,10 +34,13 @@ module glamin_async
     enumerator :: REQUEST_KIND_ADD = 2
     enumerator :: REQUEST_KIND_TRAIN = 3
     enumerator :: REQUEST_KIND_LOAD = 4
+    enumerator :: REQUEST_KIND_PIPELINE = 5
   end enum
 
   integer, parameter :: LOAD_PATH_LEN = 256
   integer, parameter :: LOAD_SPACE_LEN = 64
+  integer, parameter :: PIPELINE_CMD_LEN = 512
+  character(len=11), parameter :: DEFAULT_SPEC_OUT = 'build/specs'
 
   type :: RequestPayload
     integer(int32) :: kind = REQUEST_KIND_NONE
@@ -48,6 +52,8 @@ module glamin_async
     type(VectorBlock) :: labels
     character(len=LOAD_PATH_LEN) :: layout_path = ''
     character(len=LOAD_PATH_LEN) :: vectors_path = ''
+    character(len=LOAD_PATH_LEN) :: spec_path = ''
+    character(len=LOAD_PATH_LEN) :: out_dir = ''
     character(len=LOAD_SPACE_LEN) :: space_id = ''
     integer(int32) :: metric = 0
   end type RequestPayload
@@ -117,6 +123,20 @@ contains
       call set_payload_load(request_handle%id, layout_path, vectors_path, space_id, metric)
     end if
   end subroutine submit_load_flat
+
+  subroutine submit_pipeline(spec_path, out_dir, space_id, metric, request_handle)
+    character(len=*), intent(in) :: spec_path
+    character(len=*), intent(in) :: out_dir
+    character(len=*), intent(in) :: space_id
+    integer(int32), intent(in) :: metric
+    type(Request), intent(out) :: request_handle
+    integer(int32) :: status
+
+    call register_request(request_handle, status)
+    if (status == GLAMIN_OK) then
+      call set_payload_pipeline(request_handle%id, spec_path, out_dir, space_id, metric)
+    end if
+  end subroutine submit_pipeline
 
   subroutine poll_request(request_handle, status)
     type(Request), intent(inout) :: request_handle
@@ -258,7 +278,8 @@ contains
       return
     end if
 
-    if (request_payload(request_handle%id)%kind /= REQUEST_KIND_LOAD) then
+    if (request_payload(request_handle%id)%kind /= REQUEST_KIND_LOAD .and. &
+        request_payload(request_handle%id)%kind /= REQUEST_KIND_PIPELINE) then
       status = GLAMIN_ERR_INVALID_ARG
       return
     end if
@@ -509,6 +530,33 @@ contains
     request_payload(payload_index)%index = IndexHandle()
   end subroutine set_payload_load
 
+  subroutine set_payload_pipeline(request_id, spec_path, out_dir, space_id, metric)
+    integer(int64), intent(in) :: request_id
+    character(len=*), intent(in) :: spec_path
+    character(len=*), intent(in) :: out_dir
+    character(len=*), intent(in) :: space_id
+    integer(int32), intent(in) :: metric
+    integer(int32) :: payload_index
+    character(len=LOAD_PATH_LEN) :: resolved_out_dir
+
+    payload_index = int(request_id, int32)
+    if (payload_index <= 0_int32) then
+      return
+    end if
+
+    resolved_out_dir = trim(out_dir)
+    if (len_trim(resolved_out_dir) == 0) then
+      resolved_out_dir = DEFAULT_SPEC_OUT
+    end if
+
+    request_payload(payload_index)%kind = REQUEST_KIND_PIPELINE
+    request_payload(payload_index)%spec_path = trim(spec_path)
+    request_payload(payload_index)%out_dir = trim(resolved_out_dir)
+    request_payload(payload_index)%space_id = trim(space_id)
+    request_payload(payload_index)%metric = metric
+    request_payload(payload_index)%index = IndexHandle()
+  end subroutine set_payload_pipeline
+
   subroutine ensure_context_capacity(request_id, status)
     integer(int64), intent(in) :: request_id
     integer(int32), intent(out) :: status
@@ -550,6 +598,8 @@ contains
       call execute_train(request_id)
     case (REQUEST_KIND_LOAD)
       call execute_load(request_id)
+    case (REQUEST_KIND_PIPELINE)
+      call execute_pipeline(request_id)
     case default
       call mark_request_failed(request_id, GLAMIN_ERR_INVALID_ARG)
     end select
@@ -641,6 +691,47 @@ contains
     request_error(request_id) = GLAMIN_OK
   end subroutine execute_load
 
+  subroutine execute_pipeline(request_id)
+    integer(int64), intent(in) :: request_id
+    character(len=LOAD_PATH_LEN) :: spec_path
+    character(len=LOAD_PATH_LEN) :: out_dir
+    character(len=LOAD_PATH_LEN) :: layout_path
+    character(len=LOAD_PATH_LEN) :: vectors_path
+    character(len=LOAD_SPACE_LEN) :: space_id
+    character(len=PIPELINE_CMD_LEN) :: command
+    integer(int32) :: metric
+    type(IndexHandle) :: index
+    integer(int32) :: status
+
+    spec_path = request_payload(request_id)%spec_path
+    out_dir = request_payload(request_id)%out_dir
+    space_id = request_payload(request_id)%space_id
+    metric = request_payload(request_id)%metric
+
+    if (len_trim(spec_path) == 0 .or. len_trim(space_id) == 0) then
+      call mark_request_failed(request_id, GLAMIN_ERR_INVALID_ARG)
+      return
+    end if
+
+    call build_pipeline_command(spec_path, out_dir, command)
+    call run_command(command, status)
+    if (status /= GLAMIN_OK) then
+      call mark_request_failed(request_id, status)
+      return
+    end if
+
+    call build_pipeline_paths(out_dir, layout_path, vectors_path)
+    call load_flat_from_layout(trim(layout_path), trim(vectors_path), trim(space_id), metric, &
+      index, status)
+    if (status /= GLAMIN_OK) then
+      call mark_request_failed(request_id, status)
+      return
+    end if
+
+    request_payload(request_id)%index = index
+    request_error(request_id) = GLAMIN_OK
+  end subroutine execute_pipeline
+
   subroutine mark_request_failed(request_id, error_code)
     integer(int64), intent(in) :: request_id
     integer(int32), intent(in) :: error_code
@@ -648,4 +739,54 @@ contains
     request_error(request_id) = error_code
     request_status(request_id) = REQUEST_FAILED
   end subroutine mark_request_failed
+
+  subroutine run_command(command, status)
+    character(len=*), intent(in) :: command
+    integer(int32), intent(out) :: status
+    integer :: exitstat
+    integer :: cmdstat
+
+    exitstat = 0
+    cmdstat = 0
+    call execute_command_line(trim(command), wait=.true., exitstat=exitstat, cmdstat=cmdstat)
+
+    if (cmdstat /= 0 .or. exitstat /= 0) then
+      status = GLAMIN_ERR_UNKNOWN
+    else
+      status = GLAMIN_OK
+    end if
+  end subroutine run_command
+
+  subroutine build_pipeline_command(spec_path, out_dir, command)
+    character(len=*), intent(in) :: spec_path
+    character(len=*), intent(in) :: out_dir
+    character(len=*), intent(out) :: command
+
+    command = 'make spec-embed SPEC="' // trim(spec_path) // '" SPEC_OUT="' // &
+      trim(out_dir) // '"'
+  end subroutine build_pipeline_command
+
+  subroutine build_pipeline_paths(out_dir, layout_path, vectors_path)
+    character(len=*), intent(in) :: out_dir
+    character(len=*), intent(out) :: layout_path
+    character(len=*), intent(out) :: vectors_path
+    integer :: root_len
+    character(len=LOAD_PATH_LEN) :: root
+
+    root = trim(out_dir)
+    root_len = len_trim(root)
+    if (root_len == 0) then
+      layout_path = 'vector_layout.json'
+      vectors_path = 'vectors.bin'
+      return
+    end if
+
+    if (root(root_len:root_len) == '/') then
+      layout_path = trim(root) // 'vector_layout.json'
+      vectors_path = trim(root) // 'vectors.bin'
+    else
+      layout_path = trim(root) // '/vector_layout.json'
+      vectors_path = trim(root) // '/vectors.bin'
+    end if
+  end subroutine build_pipeline_paths
 end module glamin_async
