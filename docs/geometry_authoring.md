@@ -150,6 +150,17 @@ See `examples/async_geometry_pipeline_demo.f90` for the callback wiring.
 External runtimes can register C callbacks via `glamin_set_pipeline_callbacks`.
 See `include/glamin_pipeline.h` and `examples/pipeline_callbacks_demo.c` for a minimal stub.
 
+Run the C-driven pipeline demo (C registers callbacks, Fortran runs the pipeline):
+
+```
+gfortran -std=f2018 -Ibuild/mod -Jbuild/mod -c examples/pipeline_callbacks_bridge.f90 \
+  -o build/pipeline_callbacks_bridge.o
+cc -Iinclude -c examples/pipeline_callbacks_run.c -o build/pipeline_callbacks_run.o
+gfortran -o build/pipeline_callbacks_run build/pipeline_callbacks_bridge.o \
+  build/pipeline_callbacks_run.o build/libglamin.a
+./build/pipeline_callbacks_run
+```
+
 Note: quote version strings and timestamps to avoid YAML coercion.
 
 ---
