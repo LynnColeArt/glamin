@@ -5,9 +5,17 @@ module glamin_async
     GLAMIN_ERR_NOT_READY
   use glamin_status, only: REQUEST_PENDING, REQUEST_RUNNING, REQUEST_COMPLETED, REQUEST_CANCELLED, &
     REQUEST_FAILED
-  use glamin_types, only: Request, VectorBlock, SearchPlan, IndexHandle
+  use glamin_types, only: Request, VectorBlock, SearchPlan, IndexHandle, INDEX_KIND_FLAT, &
+    INDEX_KIND_HNSW, INDEX_KIND_IVF, INDEX_KIND_IVFPQ, INDEX_KIND_PQ, INDEX_KIND_UNKNOWN
   use glamin_geometry_loader, only: load_flat_from_layout
   use glamin_index_flat, only: flat_add, flat_search
+  use glamin_index_hnsw, only: HnswIndex, hnsw_add, hnsw_handle, hnsw_search
+  use glamin_index_ivf, only: IvfIndex, ivf_add, ivf_handle, ivf_search, ivf_train
+  use glamin_index_ivfpq, only: IvfProductQuantizerIndex, ivfpq_add, ivfpq_handle, &
+    ivfpq_search, ivfpq_train
+  use glamin_index_pq, only: PQIndex, ProductQuantizerCodebook, pq_add, pq_handle, pq_search, &
+    pq_set_codebooks, pq_train
+  use glamin_memory, only: free_aligned
   use glamin_pipeline, only: run_pipeline
   use glamin_worker_pool, only: WorkerPool, JobCallback, submit_request_job_with_callback
   implicit none
@@ -626,13 +634,56 @@ contains
     type(VectorBlock) :: queries
     type(IndexHandle) :: index
     integer(int32) :: status
+    integer(int32) :: nprobe
+    integer(int32) :: ef_search
+    type(IvfIndex), pointer :: ivf_index
+    type(IvfProductQuantizerIndex), pointer :: ivfpq_index
+    type(HnswIndex), pointer :: hnsw_index
 
     plan = request_payload(request_id)%plan
     queries = request_payload(request_id)%queries
     index = request_payload(request_id)%index
 
-    call flat_search(index, queries, plan%k, request_payload(request_id)%distances, &
-      request_payload(request_id)%labels, status)
+    select case (index%kind)
+    case (INDEX_KIND_FLAT, INDEX_KIND_UNKNOWN)
+      call flat_search(index, queries, plan%k, request_payload(request_id)%distances, &
+        request_payload(request_id)%labels, status)
+    case (INDEX_KIND_PQ)
+      call pq_search(index, queries, plan%k, request_payload(request_id)%distances, &
+        request_payload(request_id)%labels, status)
+    case (INDEX_KIND_IVF)
+      call ivf_handle(index, ivf_index)
+      if (.not. associated(ivf_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        nprobe = plan%nprobe
+        if (nprobe <= 0_int32) nprobe = max(1_int32, ivf_index%nprobe)
+        call ivf_search(ivf_index, queries, plan%k, nprobe, request_payload(request_id)%distances, &
+          request_payload(request_id)%labels, status)
+      end if
+    case (INDEX_KIND_IVFPQ)
+      call ivfpq_handle(index, ivfpq_index)
+      if (.not. associated(ivfpq_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        nprobe = plan%nprobe
+        if (nprobe <= 0_int32) nprobe = max(1_int32, ivfpq_index%nprobe)
+        call ivfpq_search(ivfpq_index, queries, plan%k, nprobe, &
+          request_payload(request_id)%distances, request_payload(request_id)%labels, status)
+      end if
+    case (INDEX_KIND_HNSW)
+      call hnsw_handle(index, hnsw_index)
+      if (.not. associated(hnsw_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        ef_search = plan%nprobe
+        if (ef_search <= 0_int32) ef_search = max(1_int32, hnsw_index%ef_search)
+        call hnsw_search(hnsw_index, queries, plan%k, ef_search, &
+          request_payload(request_id)%distances, request_payload(request_id)%labels, status)
+      end if
+    case default
+      status = GLAMIN_ERR_INVALID_ARG
+    end select
     if (status /= GLAMIN_OK) then
       call mark_request_failed(request_id, status)
       return
@@ -646,11 +697,42 @@ contains
     type(VectorBlock) :: vectors
     type(IndexHandle) :: index
     integer(int32) :: status
+    type(IvfIndex), pointer :: ivf_index
+    type(IvfProductQuantizerIndex), pointer :: ivfpq_index
+    type(HnswIndex), pointer :: hnsw_index
 
     vectors = request_payload(request_id)%vectors
     index = request_payload(request_id)%index
 
-    call flat_add(index, vectors, status)
+    select case (index%kind)
+    case (INDEX_KIND_FLAT, INDEX_KIND_UNKNOWN)
+      call flat_add(index, vectors, status)
+    case (INDEX_KIND_PQ)
+      call pq_add(index, vectors, status)
+    case (INDEX_KIND_IVF)
+      call ivf_handle(index, ivf_index)
+      if (.not. associated(ivf_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        call ivf_add(ivf_index, vectors, status)
+      end if
+    case (INDEX_KIND_IVFPQ)
+      call ivfpq_handle(index, ivfpq_index)
+      if (.not. associated(ivfpq_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        call ivfpq_add(ivfpq_index, vectors, status)
+      end if
+    case (INDEX_KIND_HNSW)
+      call hnsw_handle(index, hnsw_index)
+      if (.not. associated(hnsw_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        call hnsw_add(hnsw_index, vectors, status)
+      end if
+    case default
+      status = GLAMIN_ERR_INVALID_ARG
+    end select
     if (status /= GLAMIN_OK) then
       call mark_request_failed(request_id, status)
       return
@@ -664,11 +746,34 @@ contains
     type(VectorBlock) :: vectors
     type(IndexHandle) :: index
     integer(int32) :: status
+    type(IvfIndex), pointer :: ivf_index
+    type(IvfProductQuantizerIndex), pointer :: ivfpq_index
 
     vectors = request_payload(request_id)%vectors
     index = request_payload(request_id)%index
 
-    call flat_add(index, vectors, status)
+    select case (index%kind)
+    case (INDEX_KIND_FLAT, INDEX_KIND_UNKNOWN)
+      call flat_add(index, vectors, status)
+    case (INDEX_KIND_PQ)
+      call train_pq_index(index, vectors, status)
+    case (INDEX_KIND_IVF)
+      call ivf_handle(index, ivf_index)
+      if (.not. associated(ivf_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        call ivf_train(ivf_index, vectors, status)
+      end if
+    case (INDEX_KIND_IVFPQ)
+      call ivfpq_handle(index, ivfpq_index)
+      if (.not. associated(ivfpq_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        call ivfpq_train(ivfpq_index, vectors, status)
+      end if
+    case default
+      status = GLAMIN_ERR_INVALID_ARG
+    end select
     if (status /= GLAMIN_OK) then
       call mark_request_failed(request_id, status)
       return
@@ -676,6 +781,47 @@ contains
 
     request_error(request_id) = GLAMIN_OK
   end subroutine execute_train
+
+  subroutine train_pq_index(index, vectors, status)
+    type(IndexHandle), intent(inout) :: index
+    type(VectorBlock), intent(in) :: vectors
+    integer(int32), intent(out) :: status
+    type(PQIndex), pointer :: pq_index
+    type(ProductQuantizerCodebook) :: codebook
+    integer(int32) :: ksub
+    integer(int32) :: free_status
+
+    call pq_handle(index, pq_index)
+    if (.not. associated(pq_index)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (pq_index%nbits <= 0_int32) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    ksub = 2_int32**pq_index%nbits
+    if (ksub <= 0_int32) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    codebook = ProductQuantizerCodebook()
+    codebook%dim = pq_index%dim
+    codebook%m = pq_index%m
+    codebook%ksub = ksub
+
+    call pq_train(codebook, vectors, status)
+    if (status /= GLAMIN_OK) then
+      return
+    end if
+
+    call pq_set_codebooks(index, codebook%codebooks, status)
+    call free_aligned(codebook%codebooks%data, free_status)
+    codebook%codebooks = VectorBlock()
+  end subroutine train_pq_index
 
   subroutine execute_load(request_id)
     integer(int64), intent(in) :: request_id

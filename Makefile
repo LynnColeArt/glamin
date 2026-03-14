@@ -16,6 +16,7 @@ TEST_GPU ?= $(BUILD_DIR)/gpu_ivf_smoke
 TEST_GPU_BATCH ?= $(BUILD_DIR)/gpu_ivf_batch_smoke
 TEST_GPU_PLUGIN ?= $(BUILD_DIR)/gpu_ivf_plugin_smoke
 CUDA_PLUGIN ?= $(BUILD_DIR)/glamin_cuda_plugin_stub.so
+TEST_ASYNC_IVF ?= $(BUILD_DIR)/async_ivf_smoke
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
@@ -76,6 +77,9 @@ test-gpu: $(LIBRARY) $(TEST_GPU) $(TEST_GPU_BATCH)
 test-gpu-plugin: $(LIBRARY) $(TEST_GPU_PLUGIN) $(CUDA_PLUGIN)
 	$(TEST_GPU_PLUGIN) $(CUDA_PLUGIN)
 
+test-async: $(LIBRARY) $(TEST_ASYNC_IVF)
+	$(TEST_ASYNC_IVF)
+
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
@@ -92,6 +96,9 @@ $(CUDA_PLUGIN): tests/cuda_plugin_stub.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ $<
 
+$(TEST_ASYNC_IVF): tests/async_ivf_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
 	$(FC) $(FFLAGS) -c $< -o $@
@@ -107,7 +114,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
-	test-gpu-plugin
+	test-gpu-plugin test-async
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)

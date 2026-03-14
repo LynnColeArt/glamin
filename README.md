@@ -241,6 +241,12 @@ GPU smoke test (CUDA emulation path):
 make test-gpu
 ```
 
+Async IVF smoke test:
+
+```bash
+make test-async
+```
+
 ---
 
 ## Repository Layout
