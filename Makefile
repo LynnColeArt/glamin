@@ -18,6 +18,7 @@ TEST_GPU_PLUGIN ?= $(BUILD_DIR)/gpu_ivf_plugin_smoke
 CUDA_PLUGIN ?= $(BUILD_DIR)/glamin_cuda_plugin_stub.so
 TEST_ASYNC_IVF ?= $(BUILD_DIR)/async_ivf_smoke
 TEST_ASYNC_HNSW ?= $(BUILD_DIR)/async_hnsw_snapshot_smoke
+TEST_DISTANCE ?= $(BUILD_DIR)/distance_smoke
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
@@ -82,6 +83,9 @@ test-async: $(LIBRARY) $(TEST_ASYNC_IVF) $(TEST_ASYNC_HNSW)
 	$(TEST_ASYNC_IVF)
 	$(TEST_ASYNC_HNSW)
 
+test-distance: $(LIBRARY) $(TEST_DISTANCE)
+	$(TEST_DISTANCE)
+
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
@@ -104,6 +108,9 @@ $(TEST_ASYNC_IVF): tests/async_ivf_smoke.f90 $(LIBRARY)
 $(TEST_ASYNC_HNSW): tests/async_hnsw_snapshot_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(TEST_DISTANCE): tests/distance_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
 	$(FC) $(FFLAGS) -c $< -o $@
@@ -119,7 +126,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
-	test-gpu-plugin test-async
+	test-gpu-plugin test-async test-distance
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)

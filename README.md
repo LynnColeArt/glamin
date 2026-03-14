@@ -247,6 +247,12 @@ Async IVF + HNSW snapshot smoke tests:
 make test-async
 ```
 
+Distance kernel smoke test:
+
+```bash
+make test-distance
+```
+
 ---
 
 ## Repository Layout

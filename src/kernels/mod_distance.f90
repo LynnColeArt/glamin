@@ -48,15 +48,15 @@ contains
     integer(int32) :: alloc_status
     integer(int64) :: query_index
     integer(int64) :: vector_index
-    integer(int32) :: dim_index
     integer(int64) :: query_offset
     integer(int64) :: vector_offset
     integer(int64) :: distance_offset
     real(real32) :: accum
-    real(real32) :: diff
     real(real32), pointer :: query_data(:)
     real(real32), pointer :: vector_data(:)
     real(real32), pointer :: distance_data(:)
+    real(real32), pointer :: query_slice(:)
+    real(real32), pointer :: vector_slice(:)
 
     status = GLAMIN_OK
     if (.not. c_associated(queries%data) .or. .not. c_associated(vectors%data)) then
@@ -115,24 +115,30 @@ contains
     call c_f_pointer(vectors%data, vector_data, [int(stride_v, int64) * vector_count])
     call c_f_pointer(distances%data, distance_data, [int(stride_d, int64) * query_count])
 
-    do query_index = 1_int64, query_count
-      query_offset = (query_index - 1_int64) * stride_q
-      distance_offset = (query_index - 1_int64) * stride_d
-      do vector_index = 1_int64, vector_count
-        vector_offset = (vector_index - 1_int64) * stride_v
-        accum = 0.0_real32
-        do dim_index = 1_int32, dim
-          if (use_l2) then
-            diff = query_data(query_offset + dim_index) - &
-              vector_data(vector_offset + dim_index)
-            accum = accum + diff * diff
-          else
-            accum = accum + query_data(query_offset + dim_index) * &
-              vector_data(vector_offset + dim_index)
-          end if
+    if (use_l2) then
+      do query_index = 1_int64, query_count
+        query_offset = (query_index - 1_int64) * stride_q
+        distance_offset = (query_index - 1_int64) * stride_d
+        query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+        do vector_index = 1_int64, vector_count
+          vector_offset = (vector_index - 1_int64) * stride_v
+          vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
+          accum = sum((query_slice - vector_slice) * (query_slice - vector_slice))
+          distance_data(distance_offset + vector_index) = accum
         end do
-        distance_data(distance_offset + vector_index) = accum
       end do
-    end do
+    else
+      do query_index = 1_int64, query_count
+        query_offset = (query_index - 1_int64) * stride_q
+        distance_offset = (query_index - 1_int64) * stride_d
+        query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+        do vector_index = 1_int64, vector_count
+          vector_offset = (vector_index - 1_int64) * stride_v
+          vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
+          accum = dot_product(query_slice, vector_slice)
+          distance_data(distance_offset + vector_index) = accum
+        end do
+      end do
+    end if
   end subroutine compute_distance
 end module glamin_distance
