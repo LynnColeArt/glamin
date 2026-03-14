@@ -14,6 +14,8 @@ SPEC_LAYOUT ?= $(SPEC_OUT)/vector_layout.json
 VENV_PY ?= $(VENV_DIR)/bin/python
 TEST_GPU ?= $(BUILD_DIR)/gpu_ivf_smoke
 TEST_GPU_BATCH ?= $(BUILD_DIR)/gpu_ivf_batch_smoke
+TEST_GPU_PLUGIN ?= $(BUILD_DIR)/gpu_ivf_plugin_smoke
+CUDA_PLUGIN ?= $(BUILD_DIR)/glamin_cuda_plugin_stub.so
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
@@ -71,6 +73,9 @@ test-gpu: $(LIBRARY) $(TEST_GPU) $(TEST_GPU_BATCH)
 	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU)
 	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_BATCH)
 
+test-gpu-plugin: $(LIBRARY) $(TEST_GPU_PLUGIN) $(CUDA_PLUGIN)
+	$(TEST_GPU_PLUGIN) $(CUDA_PLUGIN)
+
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
@@ -79,6 +84,13 @@ $(TEST_GPU): tests/gpu_ivf_smoke.f90 $(LIBRARY)
 
 $(TEST_GPU_BATCH): tests/gpu_ivf_batch_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
+$(TEST_GPU_PLUGIN): tests/gpu_ivf_plugin_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY) -ldl
+
+$(CUDA_PLUGIN): tests/cuda_plugin_stub.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ $<
 
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
@@ -94,7 +106,8 @@ $(MOD_DIR):
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu
+.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
+	test-gpu-plugin
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)
