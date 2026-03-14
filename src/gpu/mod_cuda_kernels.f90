@@ -1,6 +1,6 @@
 module glamin_cuda_kernels
   use iso_fortran_env, only: int32, int64, real32
-  use iso_c_binding, only: c_associated, c_int32_t, c_int64_t, c_ptr, c_size_t
+  use iso_c_binding, only: c_associated, c_int32_t, c_int64_t, c_null_ptr, c_ptr, c_size_t
   use glamin_cuda_memory, only: CudaBuffer, cuda_buffer_allocate, cuda_buffer_download, &
     cuda_buffer_release, cuda_buffer_upload
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_NOT_READY
@@ -14,6 +14,16 @@ module glamin_cuda_kernels
   public :: cuda_distance_ip
 
   integer(int32), parameter :: DEFAULT_ALIGNMENT = 64
+  integer(int32), parameter :: MAX_CUDA_VECTOR_CACHE = 8
+
+  type :: VectorCacheEntry
+    type(CudaBuffer) :: buffer
+    type(c_ptr) :: host_ptr = c_null_ptr
+    integer(int64) :: bytes = 0
+  end type VectorCacheEntry
+
+  type(VectorCacheEntry) :: vector_cache(MAX_CUDA_VECTOR_CACHE)
+  integer :: vector_cache_position = 1
 
   interface
     function glamin_cuda_is_available() bind(c) result(flag)
@@ -98,6 +108,7 @@ contains
     integer(int64) :: total_bytes
     integer(int32) :: alloc_status
     integer(c_int32_t) :: status_c
+    logical :: vector_reused
 
     status = GLAMIN_OK
     if (.not. cuda_kernels_available()) then
@@ -171,14 +182,12 @@ contains
 
     call cuda_buffer_allocate(query_buffer, query_bytes, status)
     if (status /= GLAMIN_OK) goto 100
-    call cuda_buffer_allocate(vector_buffer, vector_bytes, status)
+    call get_cached_vector_buffer(vectors%data, vector_bytes, vector_buffer, status, vector_reused)
     if (status /= GLAMIN_OK) goto 100
     call cuda_buffer_allocate(distance_buffer, distance_bytes, status)
     if (status /= GLAMIN_OK) goto 100
 
     call cuda_buffer_upload(query_buffer, queries%data, query_bytes, status)
-    if (status /= GLAMIN_OK) goto 100
-    call cuda_buffer_upload(vector_buffer, vectors%data, vector_bytes, status)
     if (status /= GLAMIN_OK) goto 100
 
     status_c = GLAMIN_OK
@@ -200,7 +209,70 @@ contains
 
 100 continue
     call cuda_buffer_release(distance_buffer, alloc_status)
-    call cuda_buffer_release(vector_buffer, alloc_status)
     call cuda_buffer_release(query_buffer, alloc_status)
   end subroutine run_cuda_distance
+
+  subroutine get_cached_vector_buffer(host_ptr, bytes, buffer, status, reused)
+    type(c_ptr), intent(in) :: host_ptr
+    integer(int64), intent(in) :: bytes
+    type(CudaBuffer), intent(out) :: buffer
+    integer(int32), intent(out) :: status
+    logical, intent(out) :: reused
+    integer :: idx
+    integer(int32) :: local_status
+
+    status = GLAMIN_OK
+    reused = .false.
+    buffer = CudaBuffer()
+
+    if (.not. c_associated(host_ptr)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    do idx = 1, MAX_CUDA_VECTOR_CACHE
+      if (c_associated(vector_cache(idx)%host_ptr, host_ptr) .and. &
+          vector_cache(idx)%bytes == bytes) then
+        buffer = vector_cache(idx)%buffer
+        reused = .true.
+        return
+      end if
+    end do
+
+    idx = find_cache_slot()
+    if (c_associated(vector_cache(idx)%buffer%device_ptr)) then
+      call cuda_buffer_release(vector_cache(idx)%buffer, local_status)
+    end if
+
+    vector_cache(idx)%host_ptr = c_null_ptr
+    vector_cache(idx)%bytes = 0_int64
+    call cuda_buffer_allocate(vector_cache(idx)%buffer, bytes, status)
+    if (status /= GLAMIN_OK) return
+    call cuda_buffer_upload(vector_cache(idx)%buffer, host_ptr, bytes, status)
+    if (status /= GLAMIN_OK) then
+      call cuda_buffer_release(vector_cache(idx)%buffer, local_status)
+      return
+    end if
+
+    vector_cache(idx)%host_ptr = host_ptr
+    vector_cache(idx)%bytes = bytes
+    buffer = vector_cache(idx)%buffer
+  end subroutine get_cached_vector_buffer
+
+  integer function find_cache_slot()
+    integer :: idx
+
+    do idx = 1, MAX_CUDA_VECTOR_CACHE
+      if (.not. c_associated(vector_cache(idx)%host_ptr)) then
+        find_cache_slot = idx
+        return
+      end if
+    end do
+
+    find_cache_slot = vector_cache_position
+    vector_cache_position = vector_cache_position + 1
+    if (vector_cache_position > MAX_CUDA_VECTOR_CACHE) then
+      vector_cache_position = 1
+    end if
+  end function find_cache_slot
 end module glamin_cuda_kernels

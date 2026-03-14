@@ -13,6 +13,7 @@ SPEC_DOT ?= $(SPEC_OUT)/spec.dot
 SPEC_LAYOUT ?= $(SPEC_OUT)/vector_layout.json
 VENV_PY ?= $(VENV_DIR)/bin/python
 TEST_GPU ?= $(BUILD_DIR)/gpu_ivf_smoke
+TEST_GPU_BATCH ?= $(BUILD_DIR)/gpu_ivf_batch_smoke
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
@@ -44,6 +45,7 @@ F90_SOURCES = \
   src/runtime/mod_async.f90 \
   src/runtime/mod_runtime.f90 \
   src/gpu/mod_gpu_backend.f90 \
+  src/gpu/mod_cuda_ops.f90 \
   src/gpu/mod_cuda_kernels.f90 \
   src/gpu/mod_cuda_memory.f90 \
   src/gpu/mod_cuda_backend.f90 \
@@ -52,6 +54,7 @@ F90_SOURCES = \
 C_SOURCES = \
   src/runtime/thread_pool.c \
   src/gpu/cuda_ops.c \
+  src/gpu/cuda_ops_stub.c \
   src/gpu/cuda_kernels.c \
   src/gpu/cuda_memory.c
 
@@ -63,13 +66,17 @@ LIBRARY = $(BUILD_DIR)/libglamin.a
 
 all: $(LIBRARY)
 
-test-gpu: $(LIBRARY) $(TEST_GPU)
+test-gpu: $(LIBRARY) $(TEST_GPU) $(TEST_GPU_BATCH)
 	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU)
+	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_BATCH)
 
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
 $(TEST_GPU): tests/gpu_ivf_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
+$(TEST_GPU_BATCH): tests/gpu_ivf_batch_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)

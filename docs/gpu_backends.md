@@ -52,6 +52,35 @@ allocate host memory in the emulation path.
 External CUDA implementations can register kernels and memory ops via
 `include/glamin_cuda.h` (`glamin_cuda_register_ops`).
 
+The stub path can be registered via `glamin_cuda_register_stub_ops` (C)
+or `cuda_register_stub_ops` (Fortran) to validate wiring.
+
+Example (C registration sketch):
+
+```c
+#include "glamin_cuda.h"
+
+static int32_t my_distance_l2(const float *queries, int64_t query_count, int32_t query_stride,
+    const float *vectors, int64_t vector_count, int32_t vector_stride, int32_t dim,
+    float *distances, int32_t distance_stride)
+{
+  return GLAMIN_OK;
+}
+
+int main(void)
+{
+  glamin_cuda_ops ops = {
+    my_distance_l2,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+  };
+  return glamin_cuda_register_ops(&ops);
+}
+```
+
 ---
 
 ## Integration Example
