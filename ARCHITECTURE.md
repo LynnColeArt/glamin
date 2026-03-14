@@ -54,6 +54,7 @@
   - `mod_vulkan_backend.f90`: Vulkan backend stub
   - `cuda_ops.c`: CUDA ops registration
   - `cuda_ops_stub.c`: CUDA ops stub registration
+  - `cuda_ops_loader.c`: CUDA ops plugin loader
 
 ## Public API Shape
 - Pure Fortran modules with derived types and procedures.

@@ -55,6 +55,7 @@ C_SOURCES = \
   src/runtime/thread_pool.c \
   src/gpu/cuda_ops.c \
   src/gpu/cuda_ops_stub.c \
+  src/gpu/cuda_ops_loader.c \
   src/gpu/cuda_kernels.c \
   src/gpu/cuda_memory.c
 

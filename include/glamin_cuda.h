@@ -32,9 +32,14 @@ typedef struct glamin_cuda_ops
   glamin_cuda_copy_fn download;
 } glamin_cuda_ops;
 
+typedef int32_t (*glamin_cuda_plugin_init_fn)(glamin_cuda_ops *ops);
+
 int32_t glamin_cuda_register_ops(const glamin_cuda_ops *ops);
 int32_t glamin_cuda_has_ops(void);
 const glamin_cuda_ops *glamin_cuda_get_ops(void);
+
+int32_t glamin_cuda_load_ops(const char *path);
+int32_t glamin_cuda_unload_ops(void);
 
 int32_t glamin_cuda_is_available(void);
 

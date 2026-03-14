@@ -55,6 +55,12 @@ External CUDA implementations can register kernels and memory ops via
 The stub path can be registered via `glamin_cuda_register_stub_ops` (C)
 or `cuda_register_stub_ops` (Fortran) to validate wiring.
 
+Plugins can also be loaded dynamically by calling `cuda_load_ops` (Fortran)
+or `glamin_cuda_load_ops` (C). The shared library should export a
+`glamin_cuda_plugin_init` symbol that fills a `glamin_cuda_ops` struct.
+
+When using `glamin_cuda_load_ops`, link with `-ldl`.
+
 Example (C registration sketch):
 
 ```c
