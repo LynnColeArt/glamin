@@ -34,7 +34,7 @@
 
 ## Phase 4: HNSW
 - [x] Graph build and search baseline (single-layer).
-- [ ] Snapshot integration and background build tasks.
+- [x] Snapshot integration and background build tasks.
 
 ## Phase 5: Serialization and FAISS Compatibility
 - [x] Binary IO streams with endian handling.

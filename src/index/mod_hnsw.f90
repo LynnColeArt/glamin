@@ -11,6 +11,7 @@ module glamin_index_hnsw
   public :: HnswIndex
   public :: hnsw_create
   public :: hnsw_add
+  public :: hnsw_build_snapshot
   public :: hnsw_search
   public :: hnsw_destroy
   public :: hnsw_create_handle
@@ -18,6 +19,16 @@ module glamin_index_hnsw
   public :: hnsw_handle
 
   integer(int32), parameter :: DEFAULT_ALIGNMENT = 64
+
+  type :: HnswSnapshot
+    integer(int32) :: dim = 0
+    integer(int32) :: m = 0
+    integer(int32) :: metric = 0
+    type(VectorBlock) :: data
+    integer(int64) :: ntotal = 0
+    integer(int32), allocatable :: neighbors(:,:)
+    integer(int32), allocatable :: neighbor_counts(:)
+  end type HnswSnapshot
 
   type :: HnswIndex
     integer(int32) :: dim = 0
@@ -29,6 +40,8 @@ module glamin_index_hnsw
     integer(int64) :: ntotal = 0
     integer(int32), allocatable :: neighbors(:,:)
     integer(int32), allocatable :: neighbor_counts(:)
+    type(HnswSnapshot) :: snapshot
+    logical :: snapshot_ready = .false.
   end type HnswIndex
 
 contains
@@ -59,6 +72,8 @@ contains
     index%ef_search = ef_construction
     index%data = VectorBlock()
     index%ntotal = 0_int64
+    index%snapshot = HnswSnapshot()
+    index%snapshot_ready = .false.
   end subroutine hnsw_create
 
   subroutine hnsw_create_handle(handle, dim, m, ef_construction, metric, status)
@@ -276,6 +291,78 @@ contains
     deallocate(best_labels, best_distances)
   end subroutine hnsw_add
 
+  subroutine hnsw_build_snapshot(index, status)
+    type(HnswIndex), intent(inout) :: index
+    integer(int32), intent(out), optional :: status
+    integer(int32) :: elem_bytes
+    integer(int64) :: total_bytes
+    integer(int32) :: alloc_status
+    integer(int32) :: free_status
+    type(c_ptr) :: new_data
+    real(real32), pointer :: src(:)
+    real(real32), pointer :: dst(:)
+
+    call set_status(status, GLAMIN_OK, "")
+    call clear_snapshot(index)
+
+    if (index%ntotal <= 0_int64) then
+      return
+    end if
+
+    if (.not. c_associated(index%data%data)) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_snapshot data missing")
+      return
+    end if
+
+    if (.not. allocated(index%neighbors) .or. .not. allocated(index%neighbor_counts)) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_snapshot neighbors missing")
+      return
+    end if
+
+    elem_bytes = int(storage_size(0.0_real32) / 8, int32)
+    total_bytes = index%ntotal * int(index%dim, int64) * int(elem_bytes, int64)
+
+    call allocate_aligned(new_data, int(total_bytes, c_size_t), &
+      int(DEFAULT_ALIGNMENT, c_size_t), alloc_status)
+    if (alloc_status /= GLAMIN_OK) then
+      call set_status(status, alloc_status, "hnsw_snapshot alloc failed")
+      return
+    end if
+
+    call c_f_pointer(index%data%data, src, [index%ntotal * int(index%dim, int64)])
+    call c_f_pointer(new_data, dst, [index%ntotal * int(index%dim, int64)])
+    dst = src
+
+    allocate(index%snapshot%neighbors(index%m, int(index%ntotal, int32)), stat=alloc_status)
+    if (alloc_status /= 0_int32) then
+      call free_aligned(new_data, free_status)
+      call set_status(status, GLAMIN_ERR_OOM, "hnsw_snapshot neighbor alloc failed")
+      return
+    end if
+
+    allocate(index%snapshot%neighbor_counts(int(index%ntotal, int32)), stat=alloc_status)
+    if (alloc_status /= 0_int32) then
+      call free_aligned(new_data, free_status)
+      deallocate(index%snapshot%neighbors)
+      call set_status(status, GLAMIN_ERR_OOM, "hnsw_snapshot counts alloc failed")
+      return
+    end if
+
+    index%snapshot%neighbors = index%neighbors
+    index%snapshot%neighbor_counts = index%neighbor_counts
+    index%snapshot%data%data = new_data
+    index%snapshot%data%length = index%ntotal
+    index%snapshot%data%dim = index%dim
+    index%snapshot%data%stride = index%dim
+    index%snapshot%data%elem_size = elem_bytes
+    index%snapshot%data%alignment = DEFAULT_ALIGNMENT
+    index%snapshot%dim = index%dim
+    index%snapshot%m = index%m
+    index%snapshot%metric = index%metric
+    index%snapshot%ntotal = index%ntotal
+    index%snapshot_ready = .true.
+  end subroutine hnsw_build_snapshot
+
   subroutine hnsw_search(index, queries, k, ef_search, distances, labels, status)
     type(HnswIndex), intent(in) :: index
     type(VectorBlock), intent(in) :: queries
@@ -284,7 +371,41 @@ contains
     type(VectorBlock), intent(inout) :: distances
     type(VectorBlock), intent(inout) :: labels
     integer(int32), intent(out), optional :: status
-    integer(int32) :: dim
+    call set_status(status, GLAMIN_OK, "")
+
+    if (index%snapshot_ready) then
+      if (.not. allocated(index%snapshot%neighbors) .or. &
+          .not. allocated(index%snapshot%neighbor_counts)) then
+        call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_search snapshot missing")
+        return
+      end if
+      call hnsw_search_storage(index%snapshot%data, index%snapshot%neighbors, &
+        index%snapshot%neighbor_counts, index%snapshot%ntotal, index%snapshot%dim, &
+        index%snapshot%metric, queries, k, ef_search, distances, labels, status)
+    else
+      if (.not. allocated(index%neighbors) .or. .not. allocated(index%neighbor_counts)) then
+        call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_search neighbors missing")
+        return
+      end if
+      call hnsw_search_storage(index%data, index%neighbors, index%neighbor_counts, index%ntotal, &
+        index%dim, index%metric, queries, k, ef_search, distances, labels, status)
+    end if
+  end subroutine hnsw_search
+
+  subroutine hnsw_search_storage(data_block, neighbors, neighbor_counts, ntotal, dim, metric, &
+      queries, k, ef_search, distances, labels, status)
+    type(VectorBlock), intent(in) :: data_block
+    integer(int32), intent(in) :: neighbors(:,:)
+    integer(int32), intent(in) :: neighbor_counts(:)
+    integer(int64), intent(in) :: ntotal
+    integer(int32), intent(in) :: dim
+    integer(int32), intent(in) :: metric
+    type(VectorBlock), intent(in) :: queries
+    integer(int32), intent(in) :: k
+    integer(int32), intent(in) :: ef_search
+    type(VectorBlock), intent(inout) :: distances
+    type(VectorBlock), intent(inout) :: labels
+    integer(int32), intent(out), optional :: status
     integer(int32) :: stride_q
     integer(int32) :: elem_bytes
     integer(int32) :: label_bytes
@@ -320,7 +441,7 @@ contains
 
     call set_status(status, GLAMIN_OK, "")
 
-    if (index%ntotal <= 0_int64) then
+    if (ntotal <= 0_int64) then
       return
     end if
 
@@ -329,7 +450,11 @@ contains
       return
     end if
 
-    dim = index%dim
+    if (.not. c_associated(data_block%data)) then
+      call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_search data missing")
+      return
+    end if
+
     if (queries%dim /= dim) then
       call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_search dim mismatch")
       return
@@ -340,14 +465,14 @@ contains
       return
     end if
 
-    result_k = min(max(1_int32, k), int(index%ntotal, int32))
+    result_k = min(max(1_int32, k), int(ntotal, int32))
     if (result_k <= 0_int32) then
       call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_search invalid k")
       return
     end if
 
     effective_ef = max(result_k, ef_search)
-    effective_ef = min(effective_ef, int(index%ntotal, int32))
+    effective_ef = min(effective_ef, int(ntotal, int32))
     if (effective_ef <= 0_int32) then
       call set_status(status, GLAMIN_ERR_INVALID_ARG, "hnsw_search invalid ef")
       return
@@ -397,18 +522,18 @@ contains
     labels%elem_size = label_bytes
     labels%alignment = DEFAULT_ALIGNMENT
 
-    allocate(candidate_distances(index%ntotal))
-    allocate(candidate_labels(index%ntotal))
+    allocate(candidate_distances(ntotal))
+    allocate(candidate_labels(ntotal))
     allocate(top_distances(effective_ef))
     allocate(top_labels(effective_ef))
-    allocate(visited(index%ntotal))
+    allocate(visited(ntotal))
 
     call c_f_pointer(queries%data, query_data, [int(stride_q, int64) * query_count])
-    call c_f_pointer(index%data%data, data, [index%ntotal * int(dim, int64)])
+    call c_f_pointer(data_block%data, data, [ntotal * int(dim, int64)])
     call c_f_pointer(distances%data, distance_data, [int(result_k, int64) * query_count])
     call c_f_pointer(labels%data, label_data, [int(result_k, int64) * query_count])
 
-    use_l2 = index%metric == METRIC_L2
+    use_l2 = metric == METRIC_L2
 
     do query_index = 1_int32, int(query_count, int32)
       query_offset = int(query_index - 1_int32, int64) * stride_q
@@ -460,8 +585,8 @@ contains
         candidate_distances(best_index) = candidate_distances(candidate_count)
         candidate_count = candidate_count - 1_int32
 
-        do neighbor_index = 1_int32, index%neighbor_counts(best_label)
-          neighbor = index%neighbors(neighbor_index, best_label)
+        do neighbor_index = 1_int32, neighbor_counts(best_label)
+          neighbor = neighbors(neighbor_index, best_label)
           if (neighbor <= 0_int32) cycle
           if (visited(neighbor)) cycle
           visited(neighbor) = .true.
@@ -498,7 +623,7 @@ contains
     end do
 
     deallocate(candidate_distances, candidate_labels, top_distances, top_labels, visited)
-  end subroutine hnsw_search
+  end subroutine hnsw_search_storage
 
   subroutine hnsw_destroy(index, status)
     type(HnswIndex), intent(inout) :: index
@@ -520,7 +645,30 @@ contains
 
     index%data = VectorBlock()
     index%ntotal = 0_int64
+    call clear_snapshot(index)
   end subroutine hnsw_destroy
+
+  subroutine clear_snapshot(index)
+    type(HnswIndex), intent(inout) :: index
+    integer(int32) :: free_status
+
+    if (c_associated(index%snapshot%data%data)) then
+      call free_aligned(index%snapshot%data%data, free_status)
+    end if
+    if (allocated(index%snapshot%neighbors)) then
+      deallocate(index%snapshot%neighbors)
+    end if
+    if (allocated(index%snapshot%neighbor_counts)) then
+      deallocate(index%snapshot%neighbor_counts)
+    end if
+
+    index%snapshot%data = VectorBlock()
+    index%snapshot%ntotal = 0_int64
+    index%snapshot%dim = 0_int32
+    index%snapshot%m = 0_int32
+    index%snapshot%metric = 0_int32
+    index%snapshot_ready = .false.
+  end subroutine clear_snapshot
 
   subroutine add_backlink(index, data, dim, node_id, neighbor_id, distance, use_l2)
     type(HnswIndex), intent(inout) :: index

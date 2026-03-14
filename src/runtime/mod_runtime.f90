@@ -3,8 +3,8 @@ module glamin_runtime
   use glamin_errors, only: GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_NOT_READY, GLAMIN_OK
   use glamin_types, only: Request, VectorBlock, SearchPlan, IndexHandle
   use glamin_worker_pool, only: WorkerPool, start_pool, stop_pool
-  use glamin_async, only: schedule_request, submit_add, submit_search, submit_train, &
-    submit_load_flat, submit_pipeline
+  use glamin_async, only: schedule_request, submit_add, submit_search, submit_snapshot, &
+    submit_train, submit_load_flat, submit_pipeline
   implicit none
   private
 
@@ -14,6 +14,7 @@ module glamin_runtime
   public :: submit_search_async
   public :: submit_add_async
   public :: submit_train_async
+  public :: submit_snapshot_async
   public :: submit_load_flat_async
   public :: submit_pipeline_async
 
@@ -100,6 +101,21 @@ contains
     call submit_train(index, vectors, request_handle)
     call schedule_request(context%pool, request_handle, status)
   end subroutine submit_train_async
+
+  subroutine submit_snapshot_async(context, index, request_handle, status)
+    type(RuntimeContext), intent(inout) :: context
+    type(IndexHandle), intent(in) :: index
+    type(Request), intent(out) :: request_handle
+    integer(int32), intent(out) :: status
+
+    if (.not. context%is_ready) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    call submit_snapshot(index, request_handle)
+    call schedule_request(context%pool, request_handle, status)
+  end subroutine submit_snapshot_async
 
   subroutine submit_load_flat_async(context, layout_path, vectors_path, space_id, metric, &
       request_handle, status, contracts_path)

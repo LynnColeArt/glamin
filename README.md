@@ -241,7 +241,7 @@ GPU smoke test (CUDA emulation path):
 make test-gpu
 ```
 
-Async IVF smoke test:
+Async IVF + HNSW snapshot smoke tests:
 
 ```bash
 make test-async
@@ -277,7 +277,7 @@ examples/         # Usage examples (to be added)
 - [x] FAISS format compatibility for supported indices
 
 **Hardening**
-- [ ] Snapshot integration for HNSW background builds
+- [x] Snapshot integration for HNSW background builds
 - [ ] SIMD-optimized distance kernels
 - [ ] Parity test suite and regression harness
 

@@ -9,7 +9,8 @@ module glamin_async
     INDEX_KIND_HNSW, INDEX_KIND_IVF, INDEX_KIND_IVFPQ, INDEX_KIND_PQ, INDEX_KIND_UNKNOWN
   use glamin_geometry_loader, only: load_flat_from_layout
   use glamin_index_flat, only: flat_add, flat_search
-  use glamin_index_hnsw, only: HnswIndex, hnsw_add, hnsw_handle, hnsw_search
+  use glamin_index_hnsw, only: HnswIndex, hnsw_add, hnsw_build_snapshot, hnsw_handle, &
+    hnsw_search
   use glamin_index_ivf, only: IvfIndex, ivf_add, ivf_handle, ivf_search, ivf_train
   use glamin_index_ivfpq, only: IvfProductQuantizerIndex, ivfpq_add, ivfpq_handle, &
     ivfpq_search, ivfpq_train
@@ -24,6 +25,7 @@ module glamin_async
   public :: submit_search
   public :: submit_add
   public :: submit_train
+  public :: submit_snapshot
   public :: submit_load_flat
   public :: submit_pipeline
   public :: poll_request
@@ -44,6 +46,7 @@ module glamin_async
     enumerator :: REQUEST_KIND_TRAIN = 3
     enumerator :: REQUEST_KIND_LOAD = 4
     enumerator :: REQUEST_KIND_PIPELINE = 5
+    enumerator :: REQUEST_KIND_SNAPSHOT = 6
   end enum
 
   integer, parameter :: LOAD_PATH_LEN = 256
@@ -118,6 +121,17 @@ contains
       call set_payload_vectors(request_handle%id, index, vectors, REQUEST_KIND_TRAIN)
     end if
   end subroutine submit_train
+
+  subroutine submit_snapshot(index, request_handle)
+    type(IndexHandle), intent(in) :: index
+    type(Request), intent(out) :: request_handle
+    integer(int32) :: status
+
+    call register_request(request_handle, status)
+    if (status == GLAMIN_OK) then
+      call set_payload_snapshot(request_handle%id, index)
+    end if
+  end subroutine submit_snapshot
 
   subroutine submit_load_flat(layout_path, vectors_path, space_id, metric, request_handle, &
       contracts_path)
@@ -521,6 +535,20 @@ contains
     request_payload(payload_index)%vectors = vectors
   end subroutine set_payload_vectors
 
+  subroutine set_payload_snapshot(request_id, index)
+    integer(int64), intent(in) :: request_id
+    type(IndexHandle), intent(in) :: index
+    integer(int32) :: payload_index
+
+    payload_index = int(request_id, int32)
+    if (payload_index <= 0_int32) then
+      return
+    end if
+
+    request_payload(payload_index)%kind = REQUEST_KIND_SNAPSHOT
+    request_payload(payload_index)%index = index
+  end subroutine set_payload_snapshot
+
   subroutine set_payload_load(request_id, layout_path, vectors_path, space_id, metric, &
       contracts_path)
     integer(int64), intent(in) :: request_id
@@ -619,6 +647,8 @@ contains
       call execute_load(request_id)
     case (REQUEST_KIND_PIPELINE)
       call execute_pipeline(request_id)
+    case (REQUEST_KIND_SNAPSHOT)
+      call execute_snapshot(request_id)
     case default
       call mark_request_failed(request_id, GLAMIN_ERR_INVALID_ARG)
     end select
@@ -781,6 +811,34 @@ contains
 
     request_error(request_id) = GLAMIN_OK
   end subroutine execute_train
+
+  subroutine execute_snapshot(request_id)
+    integer(int64), intent(in) :: request_id
+    type(IndexHandle) :: index
+    integer(int32) :: status
+    type(HnswIndex), pointer :: hnsw_index
+
+    index = request_payload(request_id)%index
+
+    select case (index%kind)
+    case (INDEX_KIND_HNSW)
+      call hnsw_handle(index, hnsw_index)
+      if (.not. associated(hnsw_index)) then
+        status = GLAMIN_ERR_INVALID_ARG
+      else
+        call hnsw_build_snapshot(hnsw_index, status)
+      end if
+    case default
+      status = GLAMIN_ERR_INVALID_ARG
+    end select
+
+    if (status /= GLAMIN_OK) then
+      call mark_request_failed(request_id, status)
+      return
+    end if
+
+    request_error(request_id) = GLAMIN_OK
+  end subroutine execute_snapshot
 
   subroutine train_pq_index(index, vectors, status)
     type(IndexHandle), intent(inout) :: index
