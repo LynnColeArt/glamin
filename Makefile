@@ -12,9 +12,10 @@ SPEC_CANON ?= $(SPEC_OUT)/spec.json
 SPEC_DOT ?= $(SPEC_OUT)/spec.dot
 SPEC_LAYOUT ?= $(SPEC_OUT)/vector_layout.json
 VENV_PY ?= $(VENV_DIR)/bin/python
+TEST_GPU ?= $(BUILD_DIR)/gpu_ivf_smoke
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
-CFLAGS ?= -O2 -Wall -Wextra -pthread
+CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
 ARFLAGS ?= rcs
 
 F90_SOURCES = \
@@ -42,10 +43,17 @@ F90_SOURCES = \
   src/runtime/mod_pipeline.f90 \
   src/runtime/mod_async.f90 \
   src/runtime/mod_runtime.f90 \
-  src/gpu/mod_gpu_backend.f90
+  src/gpu/mod_gpu_backend.f90 \
+  src/gpu/mod_cuda_kernels.f90 \
+  src/gpu/mod_cuda_memory.f90 \
+  src/gpu/mod_cuda_backend.f90 \
+  src/gpu/mod_vulkan_backend.f90
 
 C_SOURCES = \
-  src/runtime/thread_pool.c
+  src/runtime/thread_pool.c \
+  src/gpu/cuda_ops.c \
+  src/gpu/cuda_kernels.c \
+  src/gpu/cuda_memory.c
 
 OBJECTS = \
   $(F90_SOURCES:%.f90=$(OBJ_DIR)/%.o) \
@@ -55,8 +63,14 @@ LIBRARY = $(BUILD_DIR)/libglamin.a
 
 all: $(LIBRARY)
 
+test-gpu: $(LIBRARY) $(TEST_GPU)
+	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU)
+
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
+
+$(TEST_GPU): tests/gpu_ivf_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
@@ -72,7 +86,7 @@ $(MOD_DIR):
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed
+.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)

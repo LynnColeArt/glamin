@@ -1,11 +1,12 @@
 module glamin_index_ivf
   use iso_fortran_env, only: int32, int64, real32
-  use iso_c_binding, only: c_associated, c_f_pointer, c_ptr, c_size_t
+  use iso_c_binding, only: c_associated, c_f_pointer, c_loc, c_null_ptr, c_ptr, c_size_t
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_OOM
+  use glamin_gpu_backend, only: gpu_distance_ip_dispatch, gpu_distance_l2_dispatch
   use glamin_kmeans, only: kmeans_train
   use glamin_memory, only: allocate_aligned, free_aligned
   use glamin_metrics, only: METRIC_IP, METRIC_L2
-  use glamin_types, only: VectorBlock
+  use glamin_types, only: IndexHandle, VectorBlock, INDEX_KIND_IVF, INDEX_KIND_UNKNOWN
   implicit none
   private
 
@@ -15,6 +16,9 @@ module glamin_index_ivf
   public :: ivf_add
   public :: ivf_search
   public :: ivf_destroy
+  public :: ivf_create_handle
+  public :: ivf_destroy_handle
+  public :: ivf_handle
 
   type :: IvfList
     type(VectorBlock) :: vectors
@@ -25,12 +29,15 @@ module glamin_index_ivf
   type :: IvfIndex
     integer(int32) :: dim = 0
     integer(int32) :: nlist = 0
+    integer(int32) :: nprobe = 1
     integer(int32) :: metric = 0
     type(VectorBlock) :: centroids
     type(IvfList), allocatable :: lists(:)
     integer(int64) :: ntotal = 0
     logical :: is_trained = .false.
   end type IvfIndex
+
+  integer(int32), parameter :: IVF_QUERY_BATCH = 4
 
 contains
   subroutine ivf_create(index, dim, nlist, metric, status)
@@ -55,6 +62,7 @@ contains
 
     index%dim = dim
     index%nlist = nlist
+    index%nprobe = 1_int32
     index%metric = metric
     index%centroids = VectorBlock()
     index%ntotal = 0_int64
@@ -65,6 +73,70 @@ contains
       call reset_list(index%lists(list_index))
     end do
   end subroutine ivf_create
+
+  subroutine ivf_create_handle(handle, dim, nlist, metric, status)
+    type(IndexHandle), intent(out) :: handle
+    integer(int32), intent(in) :: dim
+    integer(int32), intent(in) :: nlist
+    integer(int32), intent(in) :: metric
+    integer(int32), intent(out) :: status
+    type(IvfIndex), pointer :: ivf_index
+    integer(int32) :: alloc_status
+
+    handle%impl = c_null_ptr
+    handle%kind = INDEX_KIND_IVF
+
+    allocate(ivf_index, stat=alloc_status)
+    if (alloc_status /= 0_int32) then
+      status = GLAMIN_ERR_OOM
+      return
+    end if
+
+    call ivf_create(ivf_index, dim, nlist, metric, status)
+    if (status /= GLAMIN_OK) then
+      deallocate(ivf_index, stat=alloc_status)
+      return
+    end if
+
+    handle%impl = c_loc(ivf_index)
+    handle%kind = INDEX_KIND_IVF
+    status = GLAMIN_OK
+  end subroutine ivf_create_handle
+
+  subroutine ivf_destroy_handle(handle, status)
+    type(IndexHandle), intent(inout) :: handle
+    integer(int32), intent(out) :: status
+    type(IvfIndex), pointer :: ivf_index
+    integer(int32) :: alloc_status
+
+    call ivf_handle(handle, ivf_index)
+    if (.not. associated(ivf_index)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    call ivf_destroy(ivf_index, status)
+    deallocate(ivf_index, stat=alloc_status)
+    handle%impl = c_null_ptr
+    handle%kind = INDEX_KIND_UNKNOWN
+    status = GLAMIN_OK
+  end subroutine ivf_destroy_handle
+
+  subroutine ivf_handle(index_handle, ivf_index)
+    type(IndexHandle), intent(in) :: index_handle
+    type(IvfIndex), pointer :: ivf_index
+
+    ivf_index => null()
+    if (.not. c_associated(index_handle%impl)) then
+      return
+    end if
+
+    if (index_handle%kind /= INDEX_KIND_IVF) then
+      return
+    end if
+
+    call c_f_pointer(index_handle%impl, ivf_index)
+  end subroutine ivf_handle
 
   subroutine ivf_train(index, vectors, status)
     type(IvfIndex), intent(inout) :: index
@@ -181,21 +253,28 @@ contains
     integer(int64) :: query_index
     integer(int64) :: query_offset
     integer(int64) :: output_offset
+    integer(int64) :: batch_start
     integer(int32) :: probe_index
     integer(int32) :: list_index
     integer(int64) :: list_vector_index
-    integer(int64) :: list_offset
-    integer(int32) :: axis_index
-    real(real32) :: distance
-    real(real32) :: diff
-    real(real32), allocatable :: top_distances(:)
-    integer(int32), allocatable :: top_labels(:)
-    integer(int32), allocatable :: probe_lists(:)
+    integer(int64) :: list_count
+    integer(int32) :: batch_index
+    integer(int32) :: batch_count
+    integer(int64) :: list_distance_count
+    real(real32), allocatable :: top_distances(:,:)
+    integer(int32), allocatable :: top_labels(:,:)
+    integer(int32), allocatable :: probe_lists(:,:)
+    real(real32), allocatable, target :: query_buffer(:)
+    logical, allocatable :: list_mask(:)
+    logical :: has_list
     real(real32), pointer :: query_data(:)
-    real(real32), pointer :: list_data(:)
     real(real32), pointer :: distance_data(:)
+    real(real32), pointer :: list_distance_data(:)
     integer(int32), pointer :: label_data(:)
     logical :: use_l2
+    type(VectorBlock) :: query_block
+    type(VectorBlock) :: list_block
+    type(VectorBlock) :: list_distances
 
     call set_status(status, GLAMIN_OK, "")
 
@@ -275,60 +354,124 @@ contains
     labels%elem_size = label_bytes
     labels%alignment = 64
 
-    allocate(top_distances(result_k))
-    allocate(top_labels(result_k))
-    allocate(probe_lists(probe_count))
+    allocate(list_mask(index%nlist), stat=alloc_status)
+    if (alloc_status /= 0_int32) then
+      call set_status(status, GLAMIN_ERR_OOM, "ivf_search list mask alloc failed")
+      return
+    end if
 
     call c_f_pointer(queries%data, query_data, [int(stride_q, int64) * query_count])
     call c_f_pointer(distances%data, distance_data, [int(result_k, int64) * query_count])
     call c_f_pointer(labels%data, label_data, [int(result_k, int64) * query_count])
 
-    do query_index = 1_int64, query_count
-      query_offset = (query_index - 1_int64) * stride_q
-      call init_top_k(top_distances, top_labels, use_l2)
-
-      call select_probe_lists(index, query_data(query_offset + 1_int64:query_offset + dim), &
-        probe_count, probe_lists, local_status)
-      if (local_status /= GLAMIN_OK) then
+    batch_start = 1_int64
+    do while (batch_start <= query_count)
+      batch_count = min(int(query_count - batch_start + 1_int64, int32), IVF_QUERY_BATCH)
+      allocate(top_distances(result_k, batch_count))
+      allocate(top_labels(result_k, batch_count))
+      allocate(probe_lists(probe_count, batch_count))
+      allocate(query_buffer(dim * batch_count), stat=alloc_status)
+      if (alloc_status /= 0_int32) then
         deallocate(top_distances, top_labels, probe_lists)
-        call set_status(status, local_status, "ivf_search probe selection failed")
+        deallocate(list_mask)
+        call set_status(status, GLAMIN_ERR_OOM, "ivf_search query buffer alloc failed")
         return
       end if
 
-      do probe_index = 1_int32, probe_count
-        list_index = probe_lists(probe_index)
-        if (list_index <= 0_int32 .or. list_index > size(index%lists)) cycle
-        if (index%lists(list_index)%count <= 0_int64) cycle
+      query_block = VectorBlock()
+      query_block%data = c_loc(query_buffer(1))
+      query_block%length = int(batch_count, int64)
+      query_block%dim = dim
+      query_block%stride = dim
+      query_block%elem_size = elem_bytes
 
-        call c_f_pointer(index%lists(list_index)%vectors%data, list_data, &
-          [int(dim, int64) * index%lists(list_index)%count])
+      list_mask = .false.
 
-        do list_vector_index = 1_int64, index%lists(list_index)%count
-          list_offset = (list_vector_index - 1_int64) * dim
-          distance = 0.0_real32
-          if (use_l2) then
-            do axis_index = 1_int32, dim
-              diff = query_data(query_offset + axis_index) - list_data(list_offset + axis_index)
-              distance = distance + diff * diff
-            end do
-          else
-            do axis_index = 1_int32, dim
-              distance = distance + query_data(query_offset + axis_index) * &
-                list_data(list_offset + axis_index)
-            end do
-          end if
+      do batch_index = 1_int32, batch_count
+        query_index = batch_start + int(batch_index - 1_int32, int64)
+        query_offset = (query_index - 1_int64) * stride_q
+        query_buffer((batch_index - 1_int32) * dim + 1_int32:batch_index * dim) = &
+          query_data(query_offset + 1_int64:query_offset + dim)
+        call init_top_k(top_distances(:, batch_index), top_labels(:, batch_index), use_l2)
 
-          call update_top_k(distance, index%lists(list_index)%labels(list_vector_index), use_l2, &
-            top_distances, top_labels)
+        call select_probe_lists(index, query_data(query_offset + 1_int64:query_offset + dim), &
+          probe_count, probe_lists(:, batch_index), local_status)
+        if (local_status /= GLAMIN_OK) then
+          deallocate(top_distances, top_labels, probe_lists, query_buffer)
+          deallocate(list_mask)
+          call set_status(status, local_status, "ivf_search probe selection failed")
+          return
+        end if
+
+        do probe_index = 1_int32, probe_count
+          list_index = probe_lists(probe_index, batch_index)
+          if (list_index <= 0_int32 .or. list_index > size(index%lists)) cycle
+          list_mask(list_index) = .true.
         end do
       end do
 
-      output_offset = (query_index - 1_int64) * result_k
-      distance_data(output_offset + 1_int64:output_offset + result_k) = top_distances
-      label_data(output_offset + 1_int64:output_offset + result_k) = top_labels
+      do list_index = 1_int32, size(index%lists)
+        if (.not. list_mask(list_index)) cycle
+        if (index%lists(list_index)%count <= 0_int64) cycle
+
+        list_count = index%lists(list_index)%count
+        list_block = index%lists(list_index)%vectors
+        if (list_block%stride <= 0_int32) list_block%stride = dim
+
+        list_distances = VectorBlock()
+        if (use_l2) then
+          call gpu_distance_l2_dispatch(query_block, list_block, list_distances, local_status)
+        else
+          call gpu_distance_ip_dispatch(query_block, list_block, list_distances, local_status)
+        end if
+        if (local_status /= GLAMIN_OK) then
+          if (c_associated(list_distances%data)) then
+            call free_aligned(list_distances%data, free_status)
+          end if
+          deallocate(top_distances, top_labels, probe_lists, query_buffer)
+          deallocate(list_mask)
+          call set_status(status, local_status, "ivf_search list distance failed")
+          return
+        end if
+
+        list_distance_count = list_count * int(batch_count, int64)
+        call c_f_pointer(list_distances%data, list_distance_data, [int(list_distance_count, int64)])
+
+        do batch_index = 1_int32, batch_count
+          has_list = .false.
+          do probe_index = 1_int32, probe_count
+            if (probe_lists(probe_index, batch_index) == list_index) then
+              has_list = .true.
+              exit
+            end if
+          end do
+          if (.not. has_list) cycle
+
+          output_offset = int(batch_index - 1_int32, int64) * list_count
+          do list_vector_index = 1_int64, list_count
+            call update_top_k(list_distance_data(output_offset + list_vector_index), &
+              index%lists(list_index)%labels(list_vector_index), use_l2, &
+              top_distances(:, batch_index), top_labels(:, batch_index))
+          end do
+        end do
+
+        if (c_associated(list_distances%data)) then
+          call free_aligned(list_distances%data, free_status)
+        end if
+      end do
+
+      do batch_index = 1_int32, batch_count
+        query_index = batch_start + int(batch_index - 1_int32, int64)
+        output_offset = (query_index - 1_int64) * result_k
+        distance_data(output_offset + 1_int64:output_offset + result_k) = top_distances(:, batch_index)
+        label_data(output_offset + 1_int64:output_offset + result_k) = top_labels(:, batch_index)
+      end do
+
+      deallocate(top_distances, top_labels, probe_lists, query_buffer)
+      batch_start = batch_start + int(batch_count, int64)
     end do
 
-    deallocate(top_distances, top_labels, probe_lists)
+    deallocate(list_mask)
   end subroutine ivf_search
 
   subroutine ivf_destroy(index, status)

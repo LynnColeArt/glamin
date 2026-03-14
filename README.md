@@ -8,7 +8,7 @@
 
 ## Status: Experimental
 
-**This is a work in progress.** Core async runtime exists, geometric logic layer is nascent. APIs will change. Not yet ready for production use.
+**Experimental, but real.** Core async runtime and index foundations exist; geometric logic layer is nascent. APIs will change. Not yet ready for production use.
 
 See [Roadmap](#status) for current phase.
 
@@ -20,6 +20,15 @@ See [Roadmap](#status) for current phase.
 - `docs/space_contracts.md`
 - `docs/geometry_diff.md`
 - `docs/geometry_authoring.md`
+- `docs/gpu_backends.md`
+
+---
+
+## What Already Works
+
+- Async request lifecycle (submit/poll/wait/cancel).
+- FAISS-compatible IO for Flat/PQ/IVF/IVFPQ/HNSW.
+- Contract-enforced vector space integrity.
 
 ---
 
@@ -73,6 +82,35 @@ We don't reinvent storage. We add execution.
 
 ---
 
+## Contract Layer
+
+Glamin enforces a **contract layer** that keeps vector spaces stable and auditable:
+
+- **Space contracts** define `space_id`, dimension, metric, normalization, and invariants.
+- **Embedder contracts** bind vectors to a specific model version, preprocessing chain, and hashes.
+- **Manifests** accompany serialized data so mismatched vectors are rejected at load/write.
+
+This prevents silent contamination between document and geometry spaces and makes
+migrations explicit.
+
+See `docs/space_contracts.md` for the full schema and enforcement rules.
+
+Example (contract excerpt):
+
+```yaml
+space_id: geometry.app_state
+dim: 1024
+metric: l2
+normalization: l2
+embedder:
+  id: geomnet
+  version: 0.4.2
+  model_hash: sha256:5a6b...
+  config_hash: sha256:9f2c...
+```
+
+---
+
 ## The Vocabulary
 
 Glamin introduces concepts no coding standard has covered before:
@@ -84,6 +122,63 @@ Glamin introduces concepts no coding standard has covered before:
 | **Trace** | Execution path through the manifold. Not a call stack — a trajectory. |
 | **Manifold** | The geometric space containing all mints and decision boundaries. |
 | **Behavior** | Discrete unit of logical intent. Not a function — what the function *means*. |
+
+---
+
+## Async Request Lifecycle
+
+All index operations are non-blocking and return a request handle.
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant Runtime
+  participant Worker
+  Client->>Runtime: submit_add / submit_search
+  Runtime-->>Client: Request handle
+  Runtime->>Worker: enqueue job
+  Worker->>Runtime: job complete
+  Client->>Runtime: poll/wait/cancel
+  Runtime-->>Client: status + results
+```
+
+---
+
+## GPU Backend Selection
+
+```mermaid
+flowchart TD
+  A[Start] --> B{GLAMIN_GPU_BACKEND set?}
+  B -->|cuda/vulkan| C[Select named backend]
+  B -->|auto/empty| D[Try CUDA]
+  D -->|available| E[Use CUDA]
+  D -->|not available| F[Try Vulkan]
+  F -->|available| G[Use Vulkan]
+  F -->|not available| H[CPU fallback]
+  C --> I[Dispatch distance kernels]
+  E --> I
+  G --> I
+  H --> I
+```
+
+See `docs/gpu_backends.md` for configuration details.
+
+---
+
+## Geometry Spec Pipeline
+
+```mermaid
+flowchart LR
+  A[geometry_spec.yaml] --> B[Schema validation]
+  B --> C[Canonicalize + compile]
+  C --> D[manifest.json + contracts.json]
+  D --> E[Embedder service]
+  E --> F[vectors.bin]
+  F --> G[Async load into index]
+```
+
+The embedder runs out-of-process; the core accepts vectors only when a
+matching embedder contract is attached.
 
 ---
 
@@ -138,6 +233,14 @@ make              # Build build/libglamin.a
 make clean        # Remove build outputs
 ```
 
+## Testing
+
+GPU smoke test (CUDA emulation path):
+
+```bash
+make test-gpu
+```
+
 ---
 
 ## Repository Layout
@@ -160,14 +263,19 @@ examples/         # Usage examples (to be added)
 
 ## Status
 
-**Phase 1-2 Complete:** Runtime and kernel foundations
+**Implemented**
 - [x] Async request lifecycle
 - [x] Worker pool with C threading
 - [x] Distance kernel structure (AVX-ready)
-- [ ] Flat index with snapshot semantics
-- [ ] IVF index
-- [ ] HNSW graph navigation
-- [ ] FAISS format parity
+- [x] Flat / IVF / PQ / IVFPQ / HNSW baselines
+- [x] FAISS format compatibility for supported indices
+
+**Hardening**
+- [ ] Snapshot integration for HNSW background builds
+- [ ] SIMD-optimized distance kernels
+- [ ] Parity test suite and regression harness
+
+**Planned**
 - [ ] Python bindings
 - [ ] Go bindings
 - [ ] Rust bindings

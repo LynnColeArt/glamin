@@ -30,19 +30,21 @@
 - [x] PQ add/search primitives (nbits=8, codebooks required).
 - [x] IVF index with coarse quantizer.
 - [x] PQ training/encode/decode.
-- [ ] IVFPQ composition.
+- [x] IVFPQ composition.
 
 ## Phase 4: HNSW
-- [ ] Graph build, search, and snapshot integration.
-- [ ] Background build tasks and tuneable parameters.
+- [x] Graph build and search baseline (single-layer).
+- [ ] Snapshot integration and background build tasks.
 
 ## Phase 5: Serialization and FAISS Compatibility
 - [x] Binary IO streams with endian handling.
 - [x] Load/save FAISS IndexFlatL2/IndexFlatIP/IndexPQ.
-- [ ] Load/save IVF/IVFPQ/HNSW formats and validate output parity.
+- [x] Load/save IVF/IVFPQ/HNSW formats and validate output parity.
 
 ## Phase 6: GPU Backend Interface
-- [ ] Define backend capabilities and dispatch.
+- [x] Define backend capabilities and dispatch.
+- [x] Auto-select CUDA/Vulkan backend with CPU fallback.
+- [x] Route IVF search distances through GPU dispatch.
 - [ ] Implement one backend end-to-end for distance and IVF search.
 
 ## Phase 6a: ANE backend via Sporkle C bridge
@@ -59,6 +61,6 @@
 - [ ] NUMA affinity, huge pages, and memory compaction.
 
 ## Phase 8: Developer Experience
-- [x] Examples for async flat, FAISS round-trip, and PQ.
+- [x] Examples for async flat, FAISS round-trip, PQ, and IVFPQ.
 - [ ] Parity test suite and broader documentation.
 - [ ] Benchmark harness and regression gates.

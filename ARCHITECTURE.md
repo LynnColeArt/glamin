@@ -47,6 +47,11 @@
   - `mod_faiss_io.f90`: FAISS format adapters
 - `src/gpu`
   - `mod_gpu_backend.f90`: backend abstraction interface
+  - `mod_cuda_kernels.f90`: CUDA kernel bindings
+  - `mod_cuda_memory.f90`: CUDA buffer bindings
+  - `mod_cuda_backend.f90`: CUDA backend stub
+  - `mod_vulkan_backend.f90`: Vulkan backend stub
+  - `cuda_ops.c`: CUDA ops registration
 
 ## Public API Shape
 - Pure Fortran modules with derived types and procedures.

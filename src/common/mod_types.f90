@@ -11,6 +11,9 @@ module glamin_types
   public :: INDEX_KIND_UNKNOWN
   public :: INDEX_KIND_FLAT
   public :: INDEX_KIND_PQ
+  public :: INDEX_KIND_IVF
+  public :: INDEX_KIND_IVFPQ
+  public :: INDEX_KIND_HNSW
 
   type :: Request
     integer(int64) :: id = 0
@@ -39,6 +42,9 @@ module glamin_types
     enumerator :: INDEX_KIND_UNKNOWN = 0
     enumerator :: INDEX_KIND_FLAT = 1
     enumerator :: INDEX_KIND_PQ = 2
+    enumerator :: INDEX_KIND_IVF = 3
+    enumerator :: INDEX_KIND_IVFPQ = 4
+    enumerator :: INDEX_KIND_HNSW = 5
   end enum
 
   type :: IndexHandle

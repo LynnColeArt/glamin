@@ -16,7 +16,7 @@
 - Search output should match FAISS top-k results within a defined tolerance.
 
 ## Current Implementation
-- IndexFlatL2, IndexFlatIP, and IndexPQ load/save are implemented in `src/io/mod_faiss_io.f90`.
+- IndexFlatL2, IndexFlatIP, IndexPQ, IVF, IVFPQ, and HNSW load/save are implemented in `src/io/mod_faiss_io.f90`.
 
 ## Non-Goals (Initial)
 - GPU index file compatibility beyond core metadata.
