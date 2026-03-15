@@ -11,6 +11,8 @@ module glamin_distance
   public :: distance_ip_batch
 
   integer(int32), parameter :: DEFAULT_ALIGNMENT = 64
+  integer(int32), parameter :: QUERY_BLOCK = 8
+  integer(int32), parameter :: VECTOR_BLOCK = 64
 
 contains
   subroutine distance_l2_batch(queries, vectors, distances, status)
@@ -51,6 +53,10 @@ contains
     integer(int64) :: query_offset
     integer(int64) :: vector_offset
     integer(int64) :: distance_offset
+    integer(int64) :: query_start
+    integer(int64) :: query_end
+    integer(int64) :: vector_start
+    integer(int64) :: vector_end
     real(real32) :: accum
     real(real32) :: dot_value
     real(real32), pointer :: query_data(:)
@@ -134,32 +140,53 @@ contains
         vector_norms(vector_index) = dot_product(vector_slice, vector_slice)
       end do
 
-      do query_index = 1_int64, query_count
-        query_offset = (query_index - 1_int64) * stride_q
-        distance_offset = (query_index - 1_int64) * stride_d
-        query_slice => query_data(query_offset + 1_int64:query_offset + dim)
-        do vector_index = 1_int64, vector_count
-          vector_offset = (vector_index - 1_int64) * stride_v
-          vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
-          dot_value = dot_product(query_slice, vector_slice)
-          accum = query_norms(query_index) + vector_norms(vector_index) - 2.0_real32 * dot_value
-          if (accum < 0.0_real32) accum = 0.0_real32
-          distance_data(distance_offset + vector_index) = accum
+      query_start = 1_int64
+      do while (query_start <= query_count)
+        query_end = min(query_count, query_start + int(QUERY_BLOCK, int64) - 1_int64)
+        vector_start = 1_int64
+        do while (vector_start <= vector_count)
+          vector_end = min(vector_count, vector_start + int(VECTOR_BLOCK, int64) - 1_int64)
+          do query_index = query_start, query_end
+            query_offset = (query_index - 1_int64) * stride_q
+            distance_offset = (query_index - 1_int64) * stride_d
+            query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+            do vector_index = vector_start, vector_end
+              vector_offset = (vector_index - 1_int64) * stride_v
+              vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
+              dot_value = dot_product(query_slice, vector_slice)
+              accum = query_norms(query_index) + vector_norms(vector_index) - &
+                2.0_real32 * dot_value
+              if (accum < 0.0_real32) accum = 0.0_real32
+              distance_data(distance_offset + vector_index) = accum
+            end do
+          end do
+          vector_start = vector_end + 1_int64
         end do
+        query_start = query_end + 1_int64
       end do
 
       deallocate(query_norms, vector_norms)
     else
-      do query_index = 1_int64, query_count
-        query_offset = (query_index - 1_int64) * stride_q
-        distance_offset = (query_index - 1_int64) * stride_d
-        query_slice => query_data(query_offset + 1_int64:query_offset + dim)
-        do vector_index = 1_int64, vector_count
-          vector_offset = (vector_index - 1_int64) * stride_v
-          vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
-          dot_value = dot_product(query_slice, vector_slice)
-          distance_data(distance_offset + vector_index) = dot_value
+      query_start = 1_int64
+      do while (query_start <= query_count)
+        query_end = min(query_count, query_start + int(QUERY_BLOCK, int64) - 1_int64)
+        vector_start = 1_int64
+        do while (vector_start <= vector_count)
+          vector_end = min(vector_count, vector_start + int(VECTOR_BLOCK, int64) - 1_int64)
+          do query_index = query_start, query_end
+            query_offset = (query_index - 1_int64) * stride_q
+            distance_offset = (query_index - 1_int64) * stride_d
+            query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+            do vector_index = vector_start, vector_end
+              vector_offset = (vector_index - 1_int64) * stride_v
+              vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
+              dot_value = dot_product(query_slice, vector_slice)
+              distance_data(distance_offset + vector_index) = dot_value
+            end do
+          end do
+          vector_start = vector_end + 1_int64
         end do
+        query_start = query_end + 1_int64
       end do
     end if
   end subroutine compute_distance
