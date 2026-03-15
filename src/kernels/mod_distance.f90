@@ -11,8 +11,8 @@ module glamin_distance
   public :: distance_ip_batch
 
   integer(int32), parameter :: DEFAULT_ALIGNMENT = 64
-  integer(int32), parameter :: QUERY_BLOCK = 8
-  integer(int32), parameter :: VECTOR_BLOCK = 64
+  integer(int32), parameter :: QUERY_BLOCK = 16
+  integer(int32), parameter :: VECTOR_BLOCK = 128
 
 contains
   subroutine distance_l2_batch(queries, vectors, distances, status)
