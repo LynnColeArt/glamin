@@ -265,6 +265,12 @@ GPU backend selection smoke test:
 make test-gpu-select
 ```
 
+GPU backend fallback smoke test:
+
+```bash
+make test-gpu-fallback
+```
+
 ---
 
 ## Repository Layout

@@ -239,7 +239,9 @@ contains
       call active_backend%capabilities(caps)
       if (caps%supports_l2 /= 0_int32) then
         call active_backend%distance_l2(queries, vectors, distances, status)
-        return
+        if (status == GLAMIN_OK) then
+          return
+        end if
       end if
     end if
 
@@ -257,7 +259,9 @@ contains
       call active_backend%capabilities(caps)
       if (caps%supports_ip /= 0_int32) then
         call active_backend%distance_ip(queries, vectors, distances, status)
-        return
+        if (status == GLAMIN_OK) then
+          return
+        end if
       end if
     end if
 
