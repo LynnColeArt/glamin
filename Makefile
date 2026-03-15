@@ -15,6 +15,7 @@ VENV_PY ?= $(VENV_DIR)/bin/python
 TEST_GPU ?= $(BUILD_DIR)/gpu_ivf_smoke
 TEST_GPU_BATCH ?= $(BUILD_DIR)/gpu_ivf_batch_smoke
 TEST_GPU_PLUGIN ?= $(BUILD_DIR)/gpu_ivf_plugin_smoke
+TEST_GPU_SELECT ?= $(BUILD_DIR)/gpu_backend_select_smoke
 CUDA_PLUGIN ?= $(BUILD_DIR)/glamin_cuda_plugin_stub.so
 TEST_ASYNC_IVF ?= $(BUILD_DIR)/async_ivf_smoke
 TEST_ASYNC_HNSW ?= $(BUILD_DIR)/async_hnsw_snapshot_smoke
@@ -23,6 +24,9 @@ TEST_DISTANCE ?= $(BUILD_DIR)/distance_smoke
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
 ARFLAGS ?= rcs
+DISTANCE_QUERY_BLOCK ?= 16
+DISTANCE_VECTOR_BLOCK ?= 128
+FFLAGS += -cpp -DGLAMIN_QUERY_BLOCK=$(DISTANCE_QUERY_BLOCK) -DGLAMIN_VECTOR_BLOCK=$(DISTANCE_VECTOR_BLOCK)
 
 F90_SOURCES = \
   src/common/mod_errors.f90 \
@@ -79,6 +83,14 @@ test-gpu: $(LIBRARY) $(TEST_GPU) $(TEST_GPU_BATCH)
 test-gpu-plugin: $(LIBRARY) $(TEST_GPU_PLUGIN) $(CUDA_PLUGIN)
 	$(TEST_GPU_PLUGIN) $(CUDA_PLUGIN)
 
+test-gpu-select: $(LIBRARY) $(TEST_GPU_SELECT)
+	GLAMIN_GPU_BACKEND=auto GLAMIN_GPU_BACKEND_ORDER=vulkan,cuda GLAMIN_VULKAN_AVAILABLE=1 \
+		GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_SELECT) vulkan
+	GLAMIN_GPU_BACKEND=auto GLAMIN_GPU_BACKEND_ORDER=vulkan,cuda GLAMIN_VULKAN_AVAILABLE=0 \
+		GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_SELECT) cuda
+	GLAMIN_GPU_BACKEND=auto GLAMIN_GPU_BACKEND_ORDER=vulkan,cuda GLAMIN_VULKAN_AVAILABLE=0 \
+		GLAMIN_CUDA_AVAILABLE=0 $(TEST_GPU_SELECT) cpu
+
 test-async: $(LIBRARY) $(TEST_ASYNC_IVF) $(TEST_ASYNC_HNSW)
 	$(TEST_ASYNC_IVF)
 	$(TEST_ASYNC_HNSW)
@@ -97,6 +109,9 @@ $(TEST_GPU_BATCH): tests/gpu_ivf_batch_smoke.f90 $(LIBRARY)
 
 $(TEST_GPU_PLUGIN): tests/gpu_ivf_plugin_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY) -ldl
+
+$(TEST_GPU_SELECT): tests/gpu_backend_select_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
 $(CUDA_PLUGIN): tests/cuda_plugin_stub.c
 	@mkdir -p $(dir $@)
@@ -126,7 +141,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
-	test-gpu-plugin test-async test-distance
+	test-gpu-plugin test-gpu-select test-async test-distance
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)

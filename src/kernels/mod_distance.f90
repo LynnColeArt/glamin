@@ -11,8 +11,14 @@ module glamin_distance
   public :: distance_ip_batch
 
   integer(int32), parameter :: DEFAULT_ALIGNMENT = 64
-  integer(int32), parameter :: QUERY_BLOCK = 16
-  integer(int32), parameter :: VECTOR_BLOCK = 128
+#ifndef GLAMIN_QUERY_BLOCK
+#define GLAMIN_QUERY_BLOCK 16
+#endif
+#ifndef GLAMIN_VECTOR_BLOCK
+#define GLAMIN_VECTOR_BLOCK 128
+#endif
+  integer(int32), parameter :: QUERY_BLOCK = GLAMIN_QUERY_BLOCK
+  integer(int32), parameter :: VECTOR_BLOCK = GLAMIN_VECTOR_BLOCK
 
 contains
   subroutine distance_l2_batch(queries, vectors, distances, status)

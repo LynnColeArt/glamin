@@ -233,6 +233,12 @@ make              # Build build/libglamin.a
 make clean        # Remove build outputs
 ```
 
+Optional tuning for distance kernels:
+
+```bash
+make DISTANCE_QUERY_BLOCK=16 DISTANCE_VECTOR_BLOCK=128
+```
+
 ## Testing
 
 GPU smoke test (CUDA emulation path):
@@ -251,6 +257,12 @@ Distance kernel smoke test:
 
 ```bash
 make test-distance
+```
+
+GPU backend selection smoke test:
+
+```bash
+make test-gpu-select
 ```
 
 ---
