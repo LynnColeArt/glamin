@@ -52,11 +52,14 @@ contains
     integer(int64) :: vector_offset
     integer(int64) :: distance_offset
     real(real32) :: accum
+    real(real32) :: dot_value
     real(real32), pointer :: query_data(:)
     real(real32), pointer :: vector_data(:)
     real(real32), pointer :: distance_data(:)
     real(real32), pointer :: query_slice(:)
     real(real32), pointer :: vector_slice(:)
+    real(real32), allocatable :: query_norms(:)
+    real(real32), allocatable :: vector_norms(:)
 
     status = GLAMIN_OK
     if (.not. c_associated(queries%data) .or. .not. c_associated(vectors%data)) then
@@ -116,6 +119,21 @@ contains
     call c_f_pointer(distances%data, distance_data, [int(stride_d, int64) * query_count])
 
     if (use_l2) then
+      allocate(query_norms(query_count))
+      allocate(vector_norms(vector_count))
+
+      do query_index = 1_int64, query_count
+        query_offset = (query_index - 1_int64) * stride_q
+        query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+        query_norms(query_index) = dot_product(query_slice, query_slice)
+      end do
+
+      do vector_index = 1_int64, vector_count
+        vector_offset = (vector_index - 1_int64) * stride_v
+        vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
+        vector_norms(vector_index) = dot_product(vector_slice, vector_slice)
+      end do
+
       do query_index = 1_int64, query_count
         query_offset = (query_index - 1_int64) * stride_q
         distance_offset = (query_index - 1_int64) * stride_d
@@ -123,10 +141,14 @@ contains
         do vector_index = 1_int64, vector_count
           vector_offset = (vector_index - 1_int64) * stride_v
           vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
-          accum = sum((query_slice - vector_slice) * (query_slice - vector_slice))
+          dot_value = dot_product(query_slice, vector_slice)
+          accum = query_norms(query_index) + vector_norms(vector_index) - 2.0_real32 * dot_value
+          if (accum < 0.0_real32) accum = 0.0_real32
           distance_data(distance_offset + vector_index) = accum
         end do
       end do
+
+      deallocate(query_norms, vector_norms)
     else
       do query_index = 1_int64, query_count
         query_offset = (query_index - 1_int64) * stride_q
@@ -135,8 +157,8 @@ contains
         do vector_index = 1_int64, vector_count
           vector_offset = (vector_index - 1_int64) * stride_v
           vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
-          accum = dot_product(query_slice, vector_slice)
-          distance_data(distance_offset + vector_index) = accum
+          dot_value = dot_product(query_slice, vector_slice)
+          distance_data(distance_offset + vector_index) = dot_value
         end do
       end do
     end if
