@@ -149,13 +149,17 @@ contains
       query_start = 1_int64
       do while (query_start <= query_count)
         query_end = min(query_count, query_start + int(QUERY_BLOCK, int64) - 1_int64)
-        vector_start = 1_int64
-        do while (vector_start <= vector_count)
-          vector_end = min(vector_count, vector_start + int(VECTOR_BLOCK, int64) - 1_int64)
-          do query_index = query_start, query_end
-            query_offset = (query_index - 1_int64) * stride_q
-            distance_offset = (query_index - 1_int64) * stride_d
-            query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+!$omp parallel do default(none) private(query_index, query_offset, distance_offset, vector_start, &
+!$omp   vector_end, vector_index, vector_offset, query_slice, vector_slice, dot_value, accum) &
+!$omp   shared(query_data, vector_data, distance_data, query_norms, vector_norms, query_end, &
+!$omp   query_start, vector_count, stride_q, stride_v, stride_d, dim) schedule(static)
+        do query_index = query_start, query_end
+          query_offset = (query_index - 1_int64) * stride_q
+          distance_offset = (query_index - 1_int64) * stride_d
+          query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+          vector_start = 1_int64
+          do while (vector_start <= vector_count)
+            vector_end = min(vector_count, vector_start + int(VECTOR_BLOCK, int64) - 1_int64)
             do vector_index = vector_start, vector_end
               vector_offset = (vector_index - 1_int64) * stride_v
               vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
@@ -165,9 +169,10 @@ contains
               if (accum < 0.0_real32) accum = 0.0_real32
               distance_data(distance_offset + vector_index) = accum
             end do
+            vector_start = vector_end + 1_int64
           end do
-          vector_start = vector_end + 1_int64
         end do
+!$omp end parallel do
         query_start = query_end + 1_int64
       end do
 
@@ -176,22 +181,27 @@ contains
       query_start = 1_int64
       do while (query_start <= query_count)
         query_end = min(query_count, query_start + int(QUERY_BLOCK, int64) - 1_int64)
-        vector_start = 1_int64
-        do while (vector_start <= vector_count)
-          vector_end = min(vector_count, vector_start + int(VECTOR_BLOCK, int64) - 1_int64)
-          do query_index = query_start, query_end
-            query_offset = (query_index - 1_int64) * stride_q
-            distance_offset = (query_index - 1_int64) * stride_d
-            query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+!$omp parallel do default(none) private(query_index, query_offset, distance_offset, vector_start, &
+!$omp   vector_end, vector_index, vector_offset, query_slice, vector_slice, dot_value) &
+!$omp   shared(query_data, vector_data, distance_data, query_end, query_start, vector_count, &
+!$omp   stride_q, stride_v, stride_d, dim) schedule(static)
+        do query_index = query_start, query_end
+          query_offset = (query_index - 1_int64) * stride_q
+          distance_offset = (query_index - 1_int64) * stride_d
+          query_slice => query_data(query_offset + 1_int64:query_offset + dim)
+          vector_start = 1_int64
+          do while (vector_start <= vector_count)
+            vector_end = min(vector_count, vector_start + int(VECTOR_BLOCK, int64) - 1_int64)
             do vector_index = vector_start, vector_end
               vector_offset = (vector_index - 1_int64) * stride_v
               vector_slice => vector_data(vector_offset + 1_int64:vector_offset + dim)
               dot_value = dot_product(query_slice, vector_slice)
               distance_data(distance_offset + vector_index) = dot_value
             end do
+            vector_start = vector_end + 1_int64
           end do
-          vector_start = vector_end + 1_int64
         end do
+!$omp end parallel do
         query_start = query_end + 1_int64
       end do
     end if

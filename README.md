@@ -239,6 +239,12 @@ Optional tuning for distance kernels:
 make DISTANCE_QUERY_BLOCK=16 DISTANCE_VECTOR_BLOCK=128
 ```
 
+CPU threading (OpenMP) is enabled by default. Disable with:
+
+```bash
+make USE_OPENMP=0
+```
+
 ## Testing
 
 GPU smoke test (CUDA emulation path):
