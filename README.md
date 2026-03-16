@@ -283,6 +283,18 @@ Distance throughput benchmark:
 make bench-distance
 ```
 
+IVF index benchmark:
+
+```bash
+make bench-ivf
+```
+
+HNSW index benchmark:
+
+```bash
+make bench-hnsw
+```
+
 ---
 
 ## Repository Layout

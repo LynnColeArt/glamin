@@ -26,6 +26,24 @@ BENCH_DIM ?= 256
 BENCH_QUERIES ?= 256
 BENCH_VECTORS ?= 4096
 BENCH_ITERS ?= 3
+BENCH_IVF ?= $(BUILD_DIR)/bench_ivf
+BENCH_IVF_DIM ?= 128
+BENCH_IVF_VECTORS ?= 4096
+BENCH_IVF_QUERIES ?= 256
+BENCH_IVF_NLIST ?= 64
+BENCH_IVF_NPROBE ?= 8
+BENCH_IVF_K ?= 10
+BENCH_IVF_ITERS ?= 3
+BENCH_HNSW ?= $(BUILD_DIR)/bench_hnsw
+BENCH_HNSW_DIM ?= 128
+BENCH_HNSW_VECTORS ?= 4096
+BENCH_HNSW_QUERIES ?= 256
+BENCH_HNSW_M ?= 16
+BENCH_HNSW_EF_CONSTRUCTION ?= 64
+BENCH_HNSW_EF_SEARCH ?= 32
+BENCH_HNSW_K ?= 10
+BENCH_HNSW_ITERS ?= 3
+BENCH_HNSW_SNAPSHOT ?= 1
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
@@ -114,6 +132,15 @@ test-distance: $(LIBRARY) $(TEST_DISTANCE)
 bench-distance: $(LIBRARY) $(BENCH_DISTANCE)
 	$(BENCH_DISTANCE) $(BENCH_DIM) $(BENCH_QUERIES) $(BENCH_VECTORS) $(BENCH_ITERS)
 
+bench-ivf: $(LIBRARY) $(BENCH_IVF)
+	$(BENCH_IVF) $(BENCH_IVF_DIM) $(BENCH_IVF_VECTORS) $(BENCH_IVF_QUERIES) \
+		$(BENCH_IVF_NLIST) $(BENCH_IVF_NPROBE) $(BENCH_IVF_K) $(BENCH_IVF_ITERS)
+
+bench-hnsw: $(LIBRARY) $(BENCH_HNSW)
+	$(BENCH_HNSW) $(BENCH_HNSW_DIM) $(BENCH_HNSW_VECTORS) $(BENCH_HNSW_QUERIES) \
+		$(BENCH_HNSW_M) $(BENCH_HNSW_EF_CONSTRUCTION) $(BENCH_HNSW_EF_SEARCH) \
+		$(BENCH_HNSW_K) $(BENCH_HNSW_ITERS) $(BENCH_HNSW_SNAPSHOT)
+
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
@@ -148,6 +175,12 @@ $(TEST_DISTANCE): tests/distance_smoke.f90 $(LIBRARY)
 $(BENCH_DISTANCE): benchmarks/distance_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(BENCH_IVF): benchmarks/ivf_benchmark.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
+$(BENCH_HNSW): benchmarks/hnsw_benchmark.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
 	$(FC) $(FFLAGS) -c $< -o $@
@@ -163,7 +196,8 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
-	test-gpu-plugin test-gpu-select test-gpu-fallback test-async test-distance bench-distance
+	test-gpu-plugin test-gpu-select test-gpu-fallback test-async test-distance bench-distance \
+	bench-ivf bench-hnsw
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)
