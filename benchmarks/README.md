@@ -22,7 +22,11 @@ Build and run:
 make bench-gpu-distance
 ```
 
-This exercises the GPU dispatch path with the CUDA stub ops (no GPU required).
+This exercises the GPU dispatch path with the stub backends (no GPU required).
+Use `GLAMIN_GPU_BACKEND=auto|cuda|vulkan|cpu` and
+`GLAMIN_GPU_BACKEND_ORDER=cuda,vulkan` to override selection. Set
+`GLAMIN_CUDA_AVAILABLE=1` or `GLAMIN_VULKAN_AVAILABLE=1` to force a backend
+available during the benchmark.
 
 Override defaults:
 

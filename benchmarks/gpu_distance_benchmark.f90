@@ -4,10 +4,12 @@ program glamin_gpu_distance_benchmark
   use glamin_cuda_backend, only: CudaBackend
   use glamin_cuda_ops, only: cuda_register_stub_ops
   use glamin_errors, only: GLAMIN_OK
-  use glamin_gpu_backend, only: gpu_clear_backend, gpu_distance_ip_dispatch, &
-    gpu_distance_l2_dispatch, gpu_register_backend, gpu_select_backend
+  use glamin_gpu_backend, only: GPU_BACKEND_NAME_LEN, gpu_auto_select_backend, &
+    gpu_clear_backend, gpu_distance_ip_dispatch, gpu_distance_l2_dispatch, &
+    gpu_get_backend_name, gpu_register_backend
   use glamin_memory, only: allocate_aligned, free_aligned
   use glamin_types, only: VectorBlock
+  use glamin_vulkan_backend, only: VulkanBackend
   implicit none
 
   integer(int32), parameter :: DEFAULT_DIM = 256_int32
@@ -17,6 +19,7 @@ program glamin_gpu_distance_benchmark
   integer(c_size_t), parameter :: ALIGN_BYTES = 64_c_size_t
 
   type(CudaBackend) :: cuda_backend
+  type(VulkanBackend) :: vulkan_backend
   type(VectorBlock) :: queries
   type(VectorBlock) :: vectors
   type(VectorBlock) :: distances
@@ -24,6 +27,7 @@ program glamin_gpu_distance_benchmark
   real(real32), pointer :: vector_data(:)
   type(c_ptr) :: query_ptr
   type(c_ptr) :: vector_ptr
+  character(len=GPU_BACKEND_NAME_LEN) :: backend_name
   integer(int32) :: dim
   integer(int64) :: query_count
   integer(int64) :: vector_count
@@ -40,8 +44,12 @@ program glamin_gpu_distance_benchmark
 
   call gpu_register_backend('cuda', cuda_backend, status)
   if (status /= GLAMIN_OK) error stop "gpu_register_backend failed"
-  call gpu_select_backend('cuda', status)
-  if (status /= GLAMIN_OK) error stop "gpu_select_backend failed"
+  call gpu_register_backend('vulkan', vulkan_backend, status)
+  if (status /= GLAMIN_OK) error stop "gpu_register_backend failed"
+  call gpu_auto_select_backend(status)
+  if (status /= GLAMIN_OK) error stop "gpu_auto_select_backend failed"
+  call gpu_get_backend_name(backend_name)
+  write (*, '(a,1x,a)') 'Backend:', trim(backend_name)
 
   call allocate_aligned(query_ptr, int(dim, int64) * query_count * elem_bytes, &
     ALIGN_BYTES, status)
