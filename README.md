@@ -277,6 +277,12 @@ GPU backend fallback smoke test:
 make test-gpu-fallback
 ```
 
+Distance throughput benchmark:
+
+```bash
+make bench-distance
+```
+
 ---
 
 ## Repository Layout

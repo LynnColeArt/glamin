@@ -21,6 +21,11 @@ CUDA_PLUGIN ?= $(BUILD_DIR)/glamin_cuda_plugin_stub.so
 TEST_ASYNC_IVF ?= $(BUILD_DIR)/async_ivf_smoke
 TEST_ASYNC_HNSW ?= $(BUILD_DIR)/async_hnsw_snapshot_smoke
 TEST_DISTANCE ?= $(BUILD_DIR)/distance_smoke
+BENCH_DISTANCE ?= $(BUILD_DIR)/bench_distance
+BENCH_DIM ?= 256
+BENCH_QUERIES ?= 256
+BENCH_VECTORS ?= 4096
+BENCH_ITERS ?= 3
 
 FFLAGS ?= -std=f2018 -O2 -Wall -Wextra -J$(MOD_DIR) -I$(MOD_DIR)
 CFLAGS ?= -O2 -Wall -Wextra -pthread -Iinclude
@@ -106,6 +111,9 @@ test-async: $(LIBRARY) $(TEST_ASYNC_IVF) $(TEST_ASYNC_HNSW)
 test-distance: $(LIBRARY) $(TEST_DISTANCE)
 	$(TEST_DISTANCE)
 
+bench-distance: $(LIBRARY) $(BENCH_DISTANCE)
+	$(BENCH_DISTANCE) $(BENCH_DIM) $(BENCH_QUERIES) $(BENCH_VECTORS) $(BENCH_ITERS)
+
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
@@ -137,6 +145,9 @@ $(TEST_ASYNC_HNSW): tests/async_hnsw_snapshot_smoke.f90 $(LIBRARY)
 $(TEST_DISTANCE): tests/distance_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(BENCH_DISTANCE): benchmarks/distance_benchmark.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
 	$(FC) $(FFLAGS) -c $< -o $@
@@ -152,7 +163,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
-	test-gpu-plugin test-gpu-select test-gpu-fallback test-async test-distance
+	test-gpu-plugin test-gpu-select test-gpu-fallback test-async test-distance bench-distance
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)
