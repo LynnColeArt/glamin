@@ -18,7 +18,11 @@ TEST_GPU_PLUGIN ?= $(BUILD_DIR)/gpu_ivf_plugin_smoke
 TEST_GPU_SELECT ?= $(BUILD_DIR)/gpu_backend_select_smoke
 TEST_GPU_FALLBACK ?= $(BUILD_DIR)/gpu_backend_fallback_smoke
 TEST_GPU_DISTANCE_PARITY ?= $(BUILD_DIR)/gpu_distance_parity_smoke
+TEST_GPU_DISTANCE_PARITY_VULKAN ?= $(BUILD_DIR)/gpu_distance_parity_vulkan_smoke
 TEST_GPU_IVF_PARITY ?= $(BUILD_DIR)/gpu_ivf_parity_smoke
+TEST_GPU_IVF_PARITY_VULKAN ?= $(BUILD_DIR)/gpu_ivf_parity_vulkan_smoke
+TEST_GPU_IVFPQ_PARITY ?= $(BUILD_DIR)/gpu_ivfpq_parity_smoke
+TEST_GPU_HNSW_PARITY ?= $(BUILD_DIR)/gpu_hnsw_parity_smoke
 CUDA_PLUGIN ?= $(BUILD_DIR)/glamin_cuda_plugin_stub.so
 TEST_ASYNC_IVF ?= $(BUILD_DIR)/async_ivf_smoke
 TEST_ASYNC_HNSW ?= $(BUILD_DIR)/async_hnsw_snapshot_smoke
@@ -142,8 +146,20 @@ test-gpu-fallback: $(LIBRARY) $(TEST_GPU_FALLBACK)
 test-gpu-distance-parity: $(LIBRARY) $(TEST_GPU_DISTANCE_PARITY)
 	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_DISTANCE_PARITY)
 
+test-gpu-distance-parity-vulkan: $(LIBRARY) $(TEST_GPU_DISTANCE_PARITY_VULKAN)
+	GLAMIN_VULKAN_AVAILABLE=1 $(TEST_GPU_DISTANCE_PARITY_VULKAN)
+
 test-gpu-ivf-parity: $(LIBRARY) $(TEST_GPU_IVF_PARITY)
 	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_IVF_PARITY)
+
+test-gpu-ivf-parity-vulkan: $(LIBRARY) $(TEST_GPU_IVF_PARITY_VULKAN)
+	GLAMIN_VULKAN_AVAILABLE=1 $(TEST_GPU_IVF_PARITY_VULKAN)
+
+test-gpu-ivfpq-parity: $(LIBRARY) $(TEST_GPU_IVFPQ_PARITY)
+	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_IVFPQ_PARITY)
+
+test-gpu-hnsw-parity: $(LIBRARY) $(TEST_GPU_HNSW_PARITY)
+	GLAMIN_CUDA_AVAILABLE=1 $(TEST_GPU_HNSW_PARITY)
 
 test-async: $(LIBRARY) $(TEST_ASYNC_IVF) $(TEST_ASYNC_HNSW)
 	$(TEST_ASYNC_IVF)
@@ -194,7 +210,19 @@ $(TEST_GPU_FALLBACK): tests/gpu_backend_fallback_smoke.f90 $(LIBRARY)
 $(TEST_GPU_DISTANCE_PARITY): tests/gpu_distance_parity_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(TEST_GPU_DISTANCE_PARITY_VULKAN): tests/gpu_distance_parity_vulkan_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(TEST_GPU_IVF_PARITY): tests/gpu_ivf_parity_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
+$(TEST_GPU_IVF_PARITY_VULKAN): tests/gpu_ivf_parity_vulkan_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
+$(TEST_GPU_IVFPQ_PARITY): tests/gpu_ivfpq_parity_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
+$(TEST_GPU_HNSW_PARITY): tests/gpu_hnsw_parity_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
 $(CUDA_PLUGIN): tests/cuda_plugin_stub.c
@@ -241,8 +269,9 @@ clean:
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
 	test-gpu-plugin test-gpu-select test-gpu-fallback test-gpu-distance-parity \
-	test-gpu-ivf-parity test-async test-distance bench-distance bench-gpu-distance bench-ivf \
-	bench-hnsw bench-ivfpq
+	test-gpu-distance-parity-vulkan test-gpu-ivf-parity test-gpu-ivf-parity-vulkan \
+	test-gpu-ivfpq-parity test-gpu-hnsw-parity test-async test-distance bench-distance \
+	bench-gpu-distance bench-ivf bench-hnsw bench-ivfpq
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)

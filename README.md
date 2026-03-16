@@ -283,10 +283,34 @@ GPU distance parity smoke test:
 make test-gpu-distance-parity
 ```
 
+GPU distance parity smoke test (Vulkan stub):
+
+```bash
+make test-gpu-distance-parity-vulkan
+```
+
 GPU IVF parity smoke test:
 
 ```bash
 make test-gpu-ivf-parity
+```
+
+GPU IVF parity smoke test (Vulkan stub):
+
+```bash
+make test-gpu-ivf-parity-vulkan
+```
+
+GPU IVFPQ parity smoke test:
+
+```bash
+make test-gpu-ivfpq-parity
+```
+
+GPU HNSW parity smoke test:
+
+```bash
+make test-gpu-hnsw-parity
 ```
 
 Distance throughput benchmark:
