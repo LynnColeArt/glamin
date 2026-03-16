@@ -14,6 +14,23 @@ Override defaults via Makefile variables:
 make bench-distance BENCH_DIM=512 BENCH_QUERIES=512 BENCH_VECTORS=8192 BENCH_ITERS=5
 ```
 
+## gpu_distance_benchmark.f90
+
+Build and run:
+
+```
+make bench-gpu-distance
+```
+
+This exercises the GPU dispatch path with the CUDA stub ops (no GPU required).
+
+Override defaults:
+
+```
+make bench-gpu-distance BENCH_GPU_DIM=512 BENCH_GPU_QUERIES=512 BENCH_GPU_VECTORS=8192 \
+  BENCH_GPU_ITERS=5
+```
+
 ## ivf_benchmark.f90
 
 Build and run:

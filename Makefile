@@ -26,6 +26,11 @@ BENCH_DIM ?= 256
 BENCH_QUERIES ?= 256
 BENCH_VECTORS ?= 4096
 BENCH_ITERS ?= 3
+BENCH_GPU_DISTANCE ?= $(BUILD_DIR)/bench_gpu_distance
+BENCH_GPU_DIM ?= 256
+BENCH_GPU_QUERIES ?= 256
+BENCH_GPU_VECTORS ?= 4096
+BENCH_GPU_ITERS ?= 3
 BENCH_IVF ?= $(BUILD_DIR)/bench_ivf
 BENCH_IVF_DIM ?= 128
 BENCH_IVF_VECTORS ?= 4096
@@ -142,6 +147,10 @@ test-distance: $(LIBRARY) $(TEST_DISTANCE)
 bench-distance: $(LIBRARY) $(BENCH_DISTANCE)
 	$(BENCH_DISTANCE) $(BENCH_DIM) $(BENCH_QUERIES) $(BENCH_VECTORS) $(BENCH_ITERS)
 
+bench-gpu-distance: $(LIBRARY) $(BENCH_GPU_DISTANCE)
+	$(BENCH_GPU_DISTANCE) $(BENCH_GPU_DIM) $(BENCH_GPU_QUERIES) $(BENCH_GPU_VECTORS) \
+		$(BENCH_GPU_ITERS)
+
 bench-ivf: $(LIBRARY) $(BENCH_IVF)
 	$(BENCH_IVF) $(BENCH_IVF_DIM) $(BENCH_IVF_VECTORS) $(BENCH_IVF_QUERIES) \
 		$(BENCH_IVF_NLIST) $(BENCH_IVF_NPROBE) $(BENCH_IVF_K) $(BENCH_IVF_ITERS)
@@ -190,6 +199,9 @@ $(TEST_DISTANCE): tests/distance_smoke.f90 $(LIBRARY)
 $(BENCH_DISTANCE): benchmarks/distance_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(BENCH_GPU_DISTANCE): benchmarks/gpu_distance_benchmark.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(BENCH_IVF): benchmarks/ivf_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
@@ -215,7 +227,7 @@ clean:
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
 	test-gpu-plugin test-gpu-select test-gpu-fallback test-async test-distance bench-distance \
-	bench-ivf bench-hnsw bench-ivfpq
+	bench-gpu-distance bench-ivf bench-hnsw bench-ivfpq
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)

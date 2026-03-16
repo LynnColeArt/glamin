@@ -283,6 +283,12 @@ Distance throughput benchmark:
 make bench-distance
 ```
 
+GPU distance dispatch benchmark:
+
+```bash
+make bench-gpu-distance
+```
+
 IVF index benchmark:
 
 ```bash
