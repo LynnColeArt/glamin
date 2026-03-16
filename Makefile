@@ -34,6 +34,16 @@ BENCH_IVF_NLIST ?= 64
 BENCH_IVF_NPROBE ?= 8
 BENCH_IVF_K ?= 10
 BENCH_IVF_ITERS ?= 3
+BENCH_IVFPQ ?= $(BUILD_DIR)/bench_ivfpq
+BENCH_IVFPQ_DIM ?= 128
+BENCH_IVFPQ_VECTORS ?= 4096
+BENCH_IVFPQ_QUERIES ?= 256
+BENCH_IVFPQ_NLIST ?= 64
+BENCH_IVFPQ_NPROBE ?= 8
+BENCH_IVFPQ_M ?= 8
+BENCH_IVFPQ_KSUB ?= 256
+BENCH_IVFPQ_K ?= 10
+BENCH_IVFPQ_ITERS ?= 3
 BENCH_HNSW ?= $(BUILD_DIR)/bench_hnsw
 BENCH_HNSW_DIM ?= 128
 BENCH_HNSW_VECTORS ?= 4096
@@ -141,6 +151,11 @@ bench-hnsw: $(LIBRARY) $(BENCH_HNSW)
 		$(BENCH_HNSW_M) $(BENCH_HNSW_EF_CONSTRUCTION) $(BENCH_HNSW_EF_SEARCH) \
 		$(BENCH_HNSW_K) $(BENCH_HNSW_ITERS) $(BENCH_HNSW_SNAPSHOT)
 
+bench-ivfpq: $(LIBRARY) $(BENCH_IVFPQ)
+	$(BENCH_IVFPQ) $(BENCH_IVFPQ_DIM) $(BENCH_IVFPQ_VECTORS) $(BENCH_IVFPQ_QUERIES) \
+		$(BENCH_IVFPQ_NLIST) $(BENCH_IVFPQ_NPROBE) $(BENCH_IVFPQ_M) $(BENCH_IVFPQ_KSUB) \
+		$(BENCH_IVFPQ_K) $(BENCH_IVFPQ_ITERS)
+
 $(LIBRARY): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
@@ -181,6 +196,9 @@ $(BENCH_IVF): benchmarks/ivf_benchmark.f90 $(LIBRARY)
 $(BENCH_HNSW): benchmarks/hnsw_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(BENCH_IVFPQ): benchmarks/ivfpq_benchmark.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
 	$(FC) $(FFLAGS) -c $< -o $@
@@ -197,7 +215,7 @@ clean:
 
 .PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
 	test-gpu-plugin test-gpu-select test-gpu-fallback test-async test-distance bench-distance \
-	bench-ivf bench-hnsw
+	bench-ivf bench-hnsw bench-ivfpq
 
 spec-venv:
 	python3 -m venv $(VENV_DIR)

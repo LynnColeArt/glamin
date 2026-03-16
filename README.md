@@ -295,6 +295,12 @@ HNSW index benchmark:
 make bench-hnsw
 ```
 
+IVFPQ index benchmark:
+
+```bash
+make bench-ivfpq
+```
+
 ---
 
 ## Repository Layout
