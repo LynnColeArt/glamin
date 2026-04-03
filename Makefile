@@ -123,6 +123,131 @@ OBJECTS = \
 
 LIBRARY = $(BUILD_DIR)/libglamin.a
 
+# GNU make does not infer Fortran module dependencies from `use` statements.
+# These prerequisites make clean and parallel builds wait for the objects that
+# emit the corresponding `.mod` files.
+$(OBJ_DIR)/src/common/mod_embedder.o: $(OBJ_DIR)/src/common/mod_metrics.o
+$(OBJ_DIR)/src/common/mod_memory.o: $(OBJ_DIR)/src/common/mod_errors.o
+
+$(OBJ_DIR)/src/runtime/mod_queue.o: $(OBJ_DIR)/src/common/mod_errors.o
+$(OBJ_DIR)/src/runtime/mod_worker_pool.o: $(OBJ_DIR)/src/common/mod_errors.o
+
+$(OBJ_DIR)/src/index/mod_flat.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_metrics.o \
+	$(OBJ_DIR)/src/common/mod_types.o
+$(OBJ_DIR)/src/index/mod_ivf.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_metrics.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/gpu/mod_gpu_backend.o \
+	$(OBJ_DIR)/src/kernels/mod_kmeans.o
+$(OBJ_DIR)/src/index/mod_pq.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_metrics.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/kernels/mod_kmeans.o
+$(OBJ_DIR)/src/index/mod_ivfpq.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_metrics.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/index/mod_pq.o \
+	$(OBJ_DIR)/src/kernels/mod_kmeans.o
+$(OBJ_DIR)/src/index/mod_hnsw.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_metrics.o \
+	$(OBJ_DIR)/src/common/mod_types.o
+
+$(OBJ_DIR)/src/kernels/mod_kmeans.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_metrics.o \
+	$(OBJ_DIR)/src/common/mod_types.o
+$(OBJ_DIR)/src/kernels/mod_distance.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_types.o
+
+$(OBJ_DIR)/src/io/mod_stream.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o
+$(OBJ_DIR)/src/io/mod_vector_io.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/io/mod_stream.o
+$(OBJ_DIR)/src/io/mod_contracts.o: \
+	$(OBJ_DIR)/src/common/mod_embedder.o \
+	$(OBJ_DIR)/src/common/mod_errors.o
+$(OBJ_DIR)/src/io/mod_geometry_layout.o: $(OBJ_DIR)/src/common/mod_errors.o
+$(OBJ_DIR)/src/io/mod_geometry_loader.o: \
+	$(OBJ_DIR)/src/common/mod_embedder.o \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/index/mod_flat.o \
+	$(OBJ_DIR)/src/io/mod_contracts.o \
+	$(OBJ_DIR)/src/io/mod_geometry_layout.o \
+	$(OBJ_DIR)/src/io/mod_vector_io.o
+$(OBJ_DIR)/src/io/mod_faiss_io.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_metrics.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/index/mod_flat.o \
+	$(OBJ_DIR)/src/index/mod_hnsw.o \
+	$(OBJ_DIR)/src/index/mod_ivf.o \
+	$(OBJ_DIR)/src/index/mod_ivfpq.o \
+	$(OBJ_DIR)/src/index/mod_pq.o \
+	$(OBJ_DIR)/src/io/mod_stream.o
+
+$(OBJ_DIR)/src/runtime/mod_pipeline.o: $(OBJ_DIR)/src/common/mod_errors.o
+$(OBJ_DIR)/src/runtime/mod_async.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_status.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/index/mod_flat.o \
+	$(OBJ_DIR)/src/index/mod_hnsw.o \
+	$(OBJ_DIR)/src/index/mod_ivf.o \
+	$(OBJ_DIR)/src/index/mod_ivfpq.o \
+	$(OBJ_DIR)/src/index/mod_pq.o \
+	$(OBJ_DIR)/src/io/mod_geometry_loader.o \
+	$(OBJ_DIR)/src/runtime/mod_pipeline.o \
+	$(OBJ_DIR)/src/runtime/mod_worker_pool.o
+$(OBJ_DIR)/src/runtime/mod_runtime.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/runtime/mod_async.o \
+	$(OBJ_DIR)/src/runtime/mod_worker_pool.o
+
+$(OBJ_DIR)/src/gpu/mod_gpu_backend.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/kernels/mod_distance.o
+$(OBJ_DIR)/src/gpu/mod_cuda_ops.o: $(OBJ_DIR)/src/common/mod_errors.o
+$(OBJ_DIR)/src/gpu/mod_cuda_kernels.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_memory.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/gpu/mod_cuda_memory.o
+$(OBJ_DIR)/src/gpu/mod_cuda_memory.o: $(OBJ_DIR)/src/common/mod_errors.o
+$(OBJ_DIR)/src/gpu/mod_cuda_backend.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/gpu/mod_cuda_kernels.o \
+	$(OBJ_DIR)/src/gpu/mod_gpu_backend.o \
+	$(OBJ_DIR)/src/kernels/mod_distance.o
+$(OBJ_DIR)/src/gpu/mod_vulkan_backend.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/common/mod_types.o \
+	$(OBJ_DIR)/src/gpu/mod_gpu_backend.o \
+	$(OBJ_DIR)/src/kernels/mod_distance.o
+
 all: $(LIBRARY)
 
 test-gpu: $(LIBRARY) $(TEST_GPU) $(TEST_GPU_BATCH)
