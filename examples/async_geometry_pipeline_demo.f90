@@ -2,8 +2,9 @@ program async_geometry_pipeline_demo
   use iso_fortran_env, only: int32, int64, real32
   use iso_c_binding, only: c_f_pointer, c_loc
   use glamin_async, only: wait_request, get_loaded_index
-  use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_UNKNOWN
+  use glamin_errors, only: GLAMIN_OK
   use glamin_geometry_layout, only: load_vector_layout
+  use glamin_geometry_spec_compiler, only: compile_geometry_spec, embed_geometry_spec
   use glamin_index_flat, only: flat_destroy_handle, flat_search
   use glamin_metrics, only: METRIC_L2
   use glamin_pipeline, only: PipelineCallbacks, set_pipeline_callbacks
@@ -109,75 +110,15 @@ contains
     character(len=*), intent(in) :: spec_path
     character(len=*), intent(in) :: out_dir
     integer(int32), intent(out) :: status
-    character(len=512) :: command
 
-    call ensure_pipeline_env(status)
-    if (status /= GLAMIN_OK) then
-      return
-    end if
-
-    command = 'build/venv/bin/python tools/geometry_spec_tool.py compile "' // &
-      trim(spec_path) // '" --out-dir "' // trim(out_dir) // '"'
-    call run_command(command, status)
+    call compile_geometry_spec(spec_path, out_dir, status)
   end subroutine pipeline_compile
 
   subroutine pipeline_embed(spec_path, out_dir, status)
     character(len=*), intent(in) :: spec_path
     character(len=*), intent(in) :: out_dir
     integer(int32), intent(out) :: status
-    character(len=512) :: command
 
-    call ensure_pipeline_env(status)
-    if (status /= GLAMIN_OK) then
-      return
-    end if
-
-    command = 'build/venv/bin/python tools/geometry_embedder_cpu.py "' // &
-      trim(spec_path) // '" --output "' // trim(out_dir) // '/vectors.bin"'
-    call run_command(command, status)
+    call embed_geometry_spec(spec_path, out_dir, status)
   end subroutine pipeline_embed
-
-  subroutine ensure_pipeline_env(status)
-    integer(int32), intent(out) :: status
-    logical, save :: ready = .false.
-    logical :: exists
-    character(len=512) :: command
-
-    if (ready) then
-      status = GLAMIN_OK
-      return
-    end if
-
-    inquire(file="build/venv/bin/python", exist=exists)
-    if (.not. exists) then
-      command = "python3 -m venv build/venv"
-      call run_command(command, status)
-      if (status /= GLAMIN_OK) then
-        return
-      end if
-    end if
-
-    command = "build/venv/bin/python -m pip install -r tools/requirements.txt"
-    call run_command(command, status)
-    if (status == GLAMIN_OK) then
-      ready = .true.
-    end if
-  end subroutine ensure_pipeline_env
-
-  subroutine run_command(command, status)
-    character(len=*), intent(in) :: command
-    integer(int32), intent(out) :: status
-    integer :: exitstat
-    integer :: cmdstat
-
-    exitstat = 0
-    cmdstat = 0
-    call execute_command_line(trim(command), wait=.true., exitstat=exitstat, cmdstat=cmdstat)
-
-    if (cmdstat /= 0 .or. exitstat /= 0) then
-      status = GLAMIN_ERR_UNKNOWN
-    else
-      status = GLAMIN_OK
-    end if
-  end subroutine run_command
 end program async_geometry_pipeline_demo

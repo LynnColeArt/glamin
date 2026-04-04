@@ -71,29 +71,28 @@ Near-term tooling targets:
 
 ## Tooling Usage
 
-Install tooling dependencies:
+Build the native spec tool:
 
 ```
-python3 -m venv build/venv
-build/venv/bin/pip install -r tools/requirements.txt
+make build/glamin_spec_tool
 ```
 
 Validate a spec:
 
 ```
-build/venv/bin/python tools/geometry_spec_tool.py validate docs/geometry_spec.yaml
+build/glamin_spec_tool validate docs/geometry_spec.yaml
 ```
 
 Compile to manifest + contracts:
 
 ```
-build/venv/bin/python tools/geometry_spec_tool.py compile docs/geometry_spec.yaml --out-dir build/specs
+build/glamin_spec_tool compile docs/geometry_spec.yaml --out-dir build/specs
 ```
 
 Embed vectors with the CPU baseline:
 
 ```
-build/venv/bin/python tools/geometry_embedder_cpu.py docs/geometry_spec.yaml --output build/specs/vectors.bin
+build/glamin_spec_tool embed docs/geometry_spec.yaml --output build/specs/vectors.bin
 ```
 
 Load vectors in Fortran (dim/count from `vector_layout.json`):
@@ -112,13 +111,13 @@ call load_flat_from_layout("build/specs/vector_layout.json", "build/specs/vector
 Canonicalize to JSON:
 
 ```
-build/venv/bin/python tools/geometry_spec_tool.py canonicalize docs/geometry_spec.yaml --output build/specs/spec.json
+build/glamin_spec_tool canonicalize docs/geometry_spec.yaml --output build/specs/spec.json
 ```
 
 Render a DOT graph:
 
 ```
-build/venv/bin/python tools/geometry_spec_visualize.py docs/geometry_spec.yaml --output build/specs/spec.dot
+build/glamin_spec_tool visualize docs/geometry_spec.yaml --output build/specs/spec.dot
 ```
 
 Run the loader demo (after building + generating specs):
@@ -153,6 +152,8 @@ The pipeline uses Fortran callbacks registered through `glamin_pipeline`.
 See `examples/async_geometry_pipeline_demo.f90` for the callback wiring.
 External runtimes can register C callbacks via `glamin_set_pipeline_callbacks`.
 See `include/glamin_pipeline.h` and `examples/pipeline_callbacks_demo.c` for a minimal stub.
+The native demo callbacks call the Fortran compiler helpers directly; the C
+demo shells out to `build/glamin_spec_tool`.
 
 Contract validation hooks are available via `glamin_set_contract_validators`.
 See `include/glamin_contracts.h` for the C callback signatures.

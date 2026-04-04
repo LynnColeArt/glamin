@@ -5,13 +5,12 @@ AR = ar
 BUILD_DIR ?= build
 OBJ_DIR ?= $(BUILD_DIR)/obj
 MOD_DIR ?= $(BUILD_DIR)/mod
-VENV_DIR ?= $(BUILD_DIR)/venv
 SPEC ?= docs/geometry_spec.yaml
 SPEC_OUT ?= $(BUILD_DIR)/specs
 SPEC_CANON ?= $(SPEC_OUT)/spec.json
 SPEC_DOT ?= $(SPEC_OUT)/spec.dot
 SPEC_LAYOUT ?= $(SPEC_OUT)/vector_layout.json
-VENV_PY ?= $(VENV_DIR)/bin/python
+SPEC_TOOL ?= $(BUILD_DIR)/glamin_spec_tool
 TEST_GPU ?= $(BUILD_DIR)/gpu_ivf_smoke
 TEST_GPU_BATCH ?= $(BUILD_DIR)/gpu_ivf_batch_smoke
 TEST_GPU_PLUGIN ?= $(BUILD_DIR)/gpu_ivf_plugin_smoke
@@ -84,6 +83,8 @@ F90_SOURCES = \
   src/common/mod_status.f90 \
   src/common/mod_types.f90 \
   src/common/mod_memory.f90 \
+  src/tooling/mod_native_hash.f90 \
+  src/tooling/mod_geometry_spec_compiler.f90 \
   src/runtime/mod_queue.f90 \
   src/runtime/mod_worker_pool.f90 \
   src/index/mod_flat.f90 \
@@ -128,6 +129,9 @@ LIBRARY = $(BUILD_DIR)/libglamin.a
 # emit the corresponding `.mod` files.
 $(OBJ_DIR)/src/common/mod_embedder.o: $(OBJ_DIR)/src/common/mod_metrics.o
 $(OBJ_DIR)/src/common/mod_memory.o: $(OBJ_DIR)/src/common/mod_errors.o
+$(OBJ_DIR)/src/tooling/mod_geometry_spec_compiler.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/tooling/mod_native_hash.o
 
 $(OBJ_DIR)/src/runtime/mod_queue.o: $(OBJ_DIR)/src/common/mod_errors.o
 $(OBJ_DIR)/src/runtime/mod_worker_pool.o: $(OBJ_DIR)/src/common/mod_errors.o
@@ -378,6 +382,9 @@ $(BENCH_HNSW): benchmarks/hnsw_benchmark.f90 $(LIBRARY)
 $(BENCH_IVFPQ): benchmarks/ivfpq_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(SPEC_TOOL): tools/geometry_spec_cli.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(OBJ_DIR)/%.o: %.f90 | $(MOD_DIR)
 	@mkdir -p $(dir $@)
 	$(FC) $(FFLAGS) -c $< -o $@
@@ -392,29 +399,25 @@ $(MOD_DIR):
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: spec-venv spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
+.PHONY: spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
 	test-gpu-plugin test-gpu-select test-gpu-fallback test-gpu-distance-parity \
 	test-gpu-distance-parity-vulkan test-gpu-ivf-parity test-gpu-ivf-parity-vulkan \
 	test-gpu-ivfpq-parity test-gpu-hnsw-parity test-async test-distance bench-distance \
 	bench-gpu-distance bench-ivf bench-hnsw bench-ivfpq
 
-spec-venv:
-	python3 -m venv $(VENV_DIR)
-	$(VENV_PY) -m pip install -r tools/requirements.txt
+spec-validate: $(SPEC_TOOL)
+	$(SPEC_TOOL) validate $(SPEC)
 
-spec-validate: spec-venv
-	$(VENV_PY) tools/geometry_spec_tool.py validate $(SPEC)
+spec-compile: $(SPEC_TOOL)
+	$(SPEC_TOOL) compile $(SPEC) --out-dir $(SPEC_OUT)
 
-spec-compile: spec-venv
-	$(VENV_PY) tools/geometry_spec_tool.py compile $(SPEC) --out-dir $(SPEC_OUT)
+spec-canonicalize: $(SPEC_TOOL)
+	$(SPEC_TOOL) canonicalize $(SPEC) --output $(SPEC_CANON)
 
-spec-canonicalize: spec-venv
-	$(VENV_PY) tools/geometry_spec_tool.py canonicalize $(SPEC) --output $(SPEC_CANON)
+spec-visualize: $(SPEC_TOOL)
+	$(SPEC_TOOL) visualize $(SPEC) --output $(SPEC_DOT)
 
-spec-visualize: spec-venv
-	$(VENV_PY) tools/geometry_spec_visualize.py $(SPEC) --output $(SPEC_DOT)
-
-spec-embed: spec-compile
-	$(VENV_PY) tools/geometry_embedder_cpu.py $(SPEC) --output $(SPEC_OUT)/vectors.bin
+spec-embed: $(SPEC_TOOL)
+	$(SPEC_TOOL) embed $(SPEC) --output $(SPEC_OUT)/vectors.bin
 
 .PHONY: all clean

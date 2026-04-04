@@ -212,9 +212,9 @@ Glamin Runtime
 ## Language Bindings
 
 **Planned:**
-- **Python** — Primary interface for AI/ML workflows
 - **Go** — Systems integration, microservices
 - **Rust** — Performance-critical applications, WASM targets
+- **Python** — Optional downstream binding if it proves useful
 
 Core library is Fortran/C for maximum performance and portability. Bindings will follow once the native API stabilizes.
 
@@ -378,9 +378,9 @@ examples/         # Usage examples (to be added)
 - [ ] Parity test suite and regression harness
 
 **Planned**
-- [ ] Python bindings
 - [ ] Go bindings
 - [ ] Rust bindings
+- [ ] Optional Python bindings
 
 See [ROADMAP.md](ROADMAP.md) for detailed phases.
 
