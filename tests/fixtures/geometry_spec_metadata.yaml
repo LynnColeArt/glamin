@@ -1,0 +1,54 @@
+spec_version: "0.1"
+spec_id: metadata_flow_v1
+title: Metadata Flow Geometry
+created_at: "2025-01-12T10:00:00Z"
+owner: core_runtime
+notes: Metadata coverage spec for native compiler smoke testing.
+
+embedder:
+  id: bow_hash
+  version: "0.1"
+  input_schema: mint_text_v1
+  preprocess_chain:
+    - lowercase
+    - tokenize
+    - hash64
+    - normalize:l2
+  model_hash: sha256:test-model
+  config_hash: sha256:test-config
+  hardware_class: cpu
+  min_ram_mb: 64
+  min_vram_mb: 0
+
+spaces:
+  - space_id: geometry.metadata
+    dim: 64
+    metric: l2
+    normalization: l2
+
+mints:
+  - mint_id: meta.start
+    space_id: geometry.metadata
+    text: "Start metadata flow: #keep"
+    metadata:
+      role: allow
+      score: 7
+      enabled: true
+      flags: [true, false, audit]
+      policy:
+        retries: 3
+        mode: strict
+        gates: {alpha: true, beta: false}
+        labels:
+          primary: native
+          secondary: compiler
+  - mint_id: meta.end
+    space_id: geometry.metadata
+    text: End metadata flow.
+
+traces:
+  - trace_id: metadata_path
+    space_id: geometry.metadata
+    steps: [meta.start, meta.end]
+    notes: "Trace note: keep #literal"
+    metadata: {owner: runtime, weight: 0.75, tags: [critical, native], routing: {kind: "staged:canary #1", checks: {lint: true, perf: false}}}

@@ -64,3 +64,8 @@
 - [x] Examples for async flat, FAISS round-trip, PQ, and IVFPQ.
 - [ ] Parity test suite and broader documentation.
 - [ ] Benchmark harness and regression gates.
+
+## Phase 9: Representation Diffing
+- [ ] Define an optional `representation_diff` artifact for embedder/model migrations.
+- [ ] Integrate representation diff reporting with contract, geometry, boundary, and path diffs.
+- [ ] Prototype a lightweight offline analyzer for semantic/behavioral representation shifts.

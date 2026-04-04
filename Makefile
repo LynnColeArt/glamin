@@ -26,6 +26,8 @@ CUDA_PLUGIN ?= $(BUILD_DIR)/glamin_cuda_plugin_stub.so
 TEST_ASYNC_IVF ?= $(BUILD_DIR)/async_ivf_smoke
 TEST_ASYNC_HNSW ?= $(BUILD_DIR)/async_hnsw_snapshot_smoke
 TEST_DISTANCE ?= $(BUILD_DIR)/distance_smoke
+TEST_NATIVE_HASH ?= $(BUILD_DIR)/native_hash_smoke
+TEST_SPEC_COMPILER ?= $(BUILD_DIR)/spec_compiler_smoke
 BENCH_DISTANCE ?= $(BUILD_DIR)/bench_distance
 BENCH_DIM ?= 256
 BENCH_QUERIES ?= 256
@@ -297,6 +299,12 @@ test-async: $(LIBRARY) $(TEST_ASYNC_IVF) $(TEST_ASYNC_HNSW)
 test-distance: $(LIBRARY) $(TEST_DISTANCE)
 	$(TEST_DISTANCE)
 
+test-native-hash: $(LIBRARY) $(TEST_NATIVE_HASH)
+	$(TEST_NATIVE_HASH)
+
+test-spec-compiler: $(LIBRARY) $(TEST_SPEC_COMPILER)
+	$(TEST_SPEC_COMPILER)
+
 bench-distance: $(LIBRARY) $(BENCH_DISTANCE)
 	$(BENCH_DISTANCE) $(BENCH_DIM) $(BENCH_QUERIES) $(BENCH_VECTORS) $(BENCH_ITERS)
 
@@ -367,6 +375,12 @@ $(TEST_ASYNC_HNSW): tests/async_hnsw_snapshot_smoke.f90 $(LIBRARY)
 $(TEST_DISTANCE): tests/distance_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(TEST_NATIVE_HASH): tests/native_hash_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
+$(TEST_SPEC_COMPILER): tests/spec_compiler_smoke.f90 $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
+
 $(BENCH_DISTANCE): benchmarks/distance_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
@@ -402,7 +416,8 @@ clean:
 .PHONY: spec-validate spec-compile spec-canonicalize spec-visualize spec-embed test-gpu \
 	test-gpu-plugin test-gpu-select test-gpu-fallback test-gpu-distance-parity \
 	test-gpu-distance-parity-vulkan test-gpu-ivf-parity test-gpu-ivf-parity-vulkan \
-	test-gpu-ivfpq-parity test-gpu-hnsw-parity test-async test-distance bench-distance \
+	test-gpu-ivfpq-parity test-gpu-hnsw-parity test-async test-distance test-native-hash \
+	test-spec-compiler bench-distance \
 	bench-gpu-distance bench-ivf bench-hnsw bench-ivfpq
 
 spec-validate: $(SPEC_TOOL)

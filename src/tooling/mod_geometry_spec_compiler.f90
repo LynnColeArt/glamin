@@ -47,6 +47,21 @@ module glamin_geometry_spec_compiler
     logical :: has_max = .false.
   end type InvariantSpec
 
+  type :: MetadataEntry
+    character(len=STR_LEN) :: path = ''
+    logical :: is_object = .false.
+    character(len=:), allocatable :: value_json
+  end type MetadataEntry
+
+  type :: MetadataFrame
+    integer :: indent = 0
+    character(len=STR_LEN) :: key = ''
+  end type MetadataFrame
+
+  type :: MetadataState
+    type(MetadataFrame), allocatable :: frames(:)
+  end type MetadataState
+
   type :: SpaceSpec
     character(len=STR_LEN) :: space_id = ''
     integer(int32) :: dim = 0
@@ -61,6 +76,7 @@ module glamin_geometry_spec_compiler
     character(len=STR_LEN) :: space_id = ''
     character(len=STR_LEN) :: text = ''
     character(len=STR_LEN), allocatable :: tags(:)
+    type(MetadataEntry), allocatable :: metadata(:)
   end type MintSpec
 
   type :: CorridorSpec
@@ -80,6 +96,7 @@ module glamin_geometry_spec_compiler
     logical :: has_confidence = .false.
     character(len=STR_LEN), allocatable :: timestamps(:)
     character(len=STR_LEN) :: notes = ''
+    type(MetadataEntry), allocatable :: metadata(:)
   end type TraceSpec
 
   type :: GeometrySpec
@@ -234,6 +251,8 @@ contains
     integer :: current_mint
     integer :: current_corridor
     integer :: current_trace
+    type(MetadataState) :: mint_metadata_state
+    type(MetadataState) :: trace_metadata_state
 
     spec = GeometrySpec()
     status = GLAMIN_OK
@@ -262,6 +281,8 @@ contains
 
       if (indent == 0) then
         current_invariant = 0
+        call clear_metadata_state(mint_metadata_state)
+        call clear_metadata_state(trace_metadata_state)
         call parse_top_level_line(spec, trim(line), section, sublist, status)
       else
         select case (trim(section))
@@ -274,11 +295,11 @@ contains
         case ('spaces')
           call parse_spaces_line(spec, indent, trim(line), sublist, current_space, current_invariant, status)
         case ('mints')
-          call parse_mints_line(spec, indent, trim(line), sublist, current_mint, status)
+          call parse_mints_line(spec, indent, trim(line), sublist, current_mint, mint_metadata_state, status)
         case ('corridors')
           call parse_corridors_line(spec, indent, trim(line), current_corridor, status)
         case ('traces')
-          call parse_traces_line(spec, indent, trim(line), sublist, current_trace, status)
+          call parse_traces_line(spec, indent, trim(line), sublist, current_trace, trace_metadata_state, status)
         case default
           status = GLAMIN_ERR_INVALID_ARG
           write(error_unit, '(A)') 'glamin_spec_tool: invalid top-level section in spec'
@@ -499,12 +520,13 @@ contains
     end if
   end subroutine parse_spaces_line
 
-  subroutine parse_mints_line(spec, indent, line, sublist, current_mint, status)
+  subroutine parse_mints_line(spec, indent, line, sublist, current_mint, metadata_state, status)
     type(GeometrySpec), intent(inout) :: spec
     integer, intent(in) :: indent
     character(len=*), intent(in) :: line
     character(len=STR_LEN), intent(inout) :: sublist
     integer, intent(inout) :: current_mint
+    type(MetadataState), intent(inout) :: metadata_state
     integer(int32), intent(out) :: status
     character(len=STR_LEN) :: key
     character(len=STR_LEN) :: value
@@ -513,6 +535,7 @@ contains
 
     status = GLAMIN_OK
     if (indent == 2 .and. starts_with(line, '- ')) then
+      call clear_metadata_state(metadata_state)
       item = MintSpec()
       call append_mint(spec%mints, item)
       current_mint = size(spec%mints)
@@ -521,10 +544,14 @@ contains
       if (status /= GLAMIN_OK) return
       call assign_mint_property(spec%mints(current_mint), key, value, has_value, sublist, status)
     else if (indent == 4 .and. current_mint > 0) then
+      call clear_metadata_state(metadata_state)
       call split_key_value(line, key, value, has_value, status)
       if (status /= GLAMIN_OK) return
       call assign_mint_property(spec%mints(current_mint), key, value, has_value, sublist, status)
+    else if (indent >= 6 .and. current_mint > 0 .and. trim(sublist) == 'mint.metadata') then
+      call parse_metadata_line(spec%mints(current_mint)%metadata, 6, indent, line, metadata_state, status)
     else if (indent == 6 .and. current_mint > 0 .and. trim(sublist) == 'mint.tags') then
+      call clear_metadata_state(metadata_state)
       call append_list_item(spec%mints(current_mint)%tags, line, status)
     else
       status = GLAMIN_ERR_INVALID_ARG
@@ -559,12 +586,13 @@ contains
     end if
   end subroutine parse_corridors_line
 
-  subroutine parse_traces_line(spec, indent, line, sublist, current_trace, status)
+  subroutine parse_traces_line(spec, indent, line, sublist, current_trace, metadata_state, status)
     type(GeometrySpec), intent(inout) :: spec
     integer, intent(in) :: indent
     character(len=*), intent(in) :: line
     character(len=STR_LEN), intent(inout) :: sublist
     integer, intent(inout) :: current_trace
+    type(MetadataState), intent(inout) :: metadata_state
     integer(int32), intent(out) :: status
     character(len=STR_LEN) :: key
     character(len=STR_LEN) :: value
@@ -573,6 +601,7 @@ contains
 
     status = GLAMIN_OK
     if (indent == 2 .and. starts_with(line, '- ')) then
+      call clear_metadata_state(metadata_state)
       item = TraceSpec()
       call append_trace(spec%traces, item)
       current_trace = size(spec%traces)
@@ -581,15 +610,20 @@ contains
       if (status /= GLAMIN_OK) return
       call assign_trace_property(spec%traces(current_trace), key, value, has_value, sublist, status)
     else if (indent == 4 .and. current_trace > 0) then
+      call clear_metadata_state(metadata_state)
       call split_key_value(line, key, value, has_value, status)
       if (status /= GLAMIN_OK) return
       call assign_trace_property(spec%traces(current_trace), key, value, has_value, sublist, status)
-    else if (indent == 6 .and. current_trace > 0) then
+    else if (indent >= 6 .and. current_trace > 0) then
       select case (trim(sublist))
       case ('trace.steps')
+        call clear_metadata_state(metadata_state)
         call append_list_item(spec%traces(current_trace)%steps, line, status)
       case ('trace.timestamps')
+        call clear_metadata_state(metadata_state)
         call append_list_item(spec%traces(current_trace)%timestamps, line, status)
+      case ('trace.metadata')
+        call parse_metadata_line(spec%traces(current_trace)%metadata, 6, indent, line, metadata_state, status)
       case default
         status = GLAMIN_ERR_INVALID_ARG
       end select
@@ -720,6 +754,16 @@ contains
       else
         sublist = 'mint.tags'
       end if
+    case ('metadata')
+      if (has_value) then
+        if (starts_with(trim(adjustl(value)), '{')) then
+          call parse_inline_metadata_object(item%metadata, trim(adjustl(value)), '', status)
+        else
+          status = GLAMIN_ERR_INVALID_ARG
+        end if
+      else
+        sublist = 'mint.metadata'
+      end if
     case default
       status = GLAMIN_ERR_INVALID_ARG
     end select
@@ -787,6 +831,16 @@ contains
       end if
     case ('notes')
       item%notes = trim(unquote(value))
+    case ('metadata')
+      if (has_value) then
+        if (starts_with(trim(adjustl(value)), '{')) then
+          call parse_inline_metadata_object(item%metadata, trim(adjustl(value)), '', status)
+        else
+          status = GLAMIN_ERR_INVALID_ARG
+        end if
+      else
+        sublist = 'trace.metadata'
+      end if
     case default
       status = GLAMIN_ERR_INVALID_ARG
     end select
@@ -1143,7 +1197,7 @@ contains
     integer :: mark
 
     stripped = raw_line
-    mark = index(stripped, '#')
+    mark = find_yaml_comment_mark(stripped)
     if (mark > 0) stripped = stripped(:mark - 1)
 
     indent = 0
@@ -1169,7 +1223,7 @@ contains
     has_value = .false.
     status = GLAMIN_OK
 
-    colon_pos = index(line, ':')
+    colon_pos = find_top_level_delimiter(line, 1, ':')
     if (colon_pos == 0) then
       status = GLAMIN_ERR_INVALID_ARG
       return
@@ -1337,6 +1391,24 @@ contains
     end if
   end subroutine append_trace
 
+  subroutine append_metadata_entry(list, value)
+    type(MetadataEntry), allocatable, intent(inout) :: list(:)
+    type(MetadataEntry), intent(in) :: value
+    type(MetadataEntry), allocatable :: grown(:)
+    integer :: n
+
+    if (.not. allocated(list)) then
+      allocate(list(1))
+      list(1) = value
+    else
+      n = size(list)
+      allocate(grown(n + 1))
+      grown(1:n) = list
+      grown(n + 1) = value
+      call move_alloc(grown, list)
+    end if
+  end subroutine append_metadata_entry
+
   subroutine parse_int32(raw_value, value, status)
     character(len=*), intent(in) :: raw_value
     integer(int32), intent(out) :: value
@@ -1368,6 +1440,579 @@ contains
       status = GLAMIN_OK
     end if
   end subroutine parse_real64
+
+  subroutine clear_metadata_state(state)
+    type(MetadataState), intent(inout) :: state
+
+    if (allocated(state%frames)) deallocate(state%frames)
+  end subroutine clear_metadata_state
+
+  subroutine push_metadata_frame(state, indent, key)
+    type(MetadataState), intent(inout) :: state
+    integer, intent(in) :: indent
+    character(len=*), intent(in) :: key
+    type(MetadataFrame) :: frame
+
+    frame = MetadataFrame()
+    frame%indent = indent
+    frame%key = trim(key)
+
+    if (.not. allocated(state%frames)) then
+      allocate(state%frames(1))
+      state%frames(1) = frame
+    else
+      state%frames = [state%frames, frame]
+    end if
+  end subroutine push_metadata_frame
+
+  subroutine prune_metadata_state(state, indent)
+    type(MetadataState), intent(inout) :: state
+    integer, intent(in) :: indent
+    integer :: depth
+
+    if (.not. allocated(state%frames)) return
+
+    do while (allocated(state%frames))
+      depth = size(state%frames)
+      if (depth == 0) then
+        deallocate(state%frames)
+        exit
+      end if
+      if (indent > state%frames(depth)%indent) exit
+      if (depth == 1) then
+        deallocate(state%frames)
+        exit
+      end if
+      state%frames = state%frames(:depth - 1)
+    end do
+  end subroutine prune_metadata_state
+
+  integer function find_metadata_entry(list, key) result(idx)
+    type(MetadataEntry), allocatable, intent(in) :: list(:)
+    character(len=*), intent(in) :: key
+    integer :: pos
+
+    idx = 0
+    if (.not. allocated(list)) return
+    do pos = 1, size(list)
+      if (trim(list(pos)%path) == trim(key)) then
+        idx = pos
+        return
+      end if
+    end do
+  end function find_metadata_entry
+
+  integer function find_metadata_entry_value(list, key) result(idx)
+    type(MetadataEntry), intent(in) :: list(:)
+    character(len=*), intent(in) :: key
+    integer :: pos
+
+    idx = 0
+    do pos = 1, size(list)
+      if (trim(list(pos)%path) == trim(key)) then
+        idx = pos
+        return
+      end if
+    end do
+  end function find_metadata_entry_value
+
+  subroutine upsert_metadata_entry(list, key, value_json, is_object, status)
+    type(MetadataEntry), allocatable, intent(inout) :: list(:)
+    character(len=*), intent(in) :: key
+    character(len=*), intent(in) :: value_json
+    logical, intent(in) :: is_object
+    integer(int32), intent(out) :: status
+    type(MetadataEntry) :: entry
+    integer :: idx
+
+    status = GLAMIN_OK
+    idx = find_metadata_entry(list, key)
+
+    if (idx == 0) then
+      entry = MetadataEntry()
+      entry%path = trim(key)
+      entry%is_object = is_object
+      if (.not. is_object) entry%value_json = trim(value_json)
+      call append_metadata_entry(list, entry)
+      return
+    end if
+
+    list(idx)%path = trim(key)
+    list(idx)%is_object = is_object
+    if (is_object) then
+      if (allocated(list(idx)%value_json)) deallocate(list(idx)%value_json)
+    else
+      list(idx)%value_json = trim(value_json)
+    end if
+  end subroutine upsert_metadata_entry
+
+  function metadata_path_for(state, key) result(path)
+    type(MetadataState), intent(in) :: state
+    character(len=*), intent(in) :: key
+    character(len=:), allocatable :: path
+    integer :: idx
+
+    path = ''
+    if (allocated(state%frames)) then
+      do idx = 1, size(state%frames)
+        if (idx > 1) path = path // '.'
+        path = path // trim(state%frames(idx)%key)
+      end do
+      if (len(path) > 0) path = path // '.'
+    end if
+    path = path // trim(key)
+  end function metadata_path_for
+
+  recursive subroutine parse_inline_metadata_object(list, raw_value, prefix, status)
+    type(MetadataEntry), allocatable, intent(inout) :: list(:)
+    character(len=*), intent(in) :: raw_value
+    character(len=*), intent(in) :: prefix
+    integer(int32), intent(out) :: status
+    character(len=STR_LEN) :: inner
+    character(len=STR_LEN) :: item
+    character(len=STR_LEN) :: key
+    character(len=STR_LEN) :: value
+    character(len=:), allocatable :: full_path
+    character(len=:), allocatable :: value_json
+    integer :: start_pos
+    integer :: delim_pos
+    logical :: has_value
+
+    status = GLAMIN_OK
+    inner = trim(adjustl(raw_value))
+    if (.not. starts_with(inner, '{') .or. inner(len_trim(inner):len_trim(inner)) /= '}') then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (allocated(list)) deallocate(list)
+    if (len_trim(inner) <= 2) then
+      allocate(list(0))
+      return
+    end if
+
+    inner = trim(adjustl(inner(2:len_trim(inner) - 1)))
+    start_pos = 1
+    do
+      delim_pos = find_top_level_delimiter(inner, start_pos, ',')
+      if (delim_pos == 0) then
+        item = trim(adjustl(inner(start_pos:)))
+      else
+        item = trim(adjustl(inner(start_pos:delim_pos - 1)))
+      end if
+
+      if (len_trim(item) == 0) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+
+      call split_inline_key_value(item, key, value, has_value, status)
+      if (status /= GLAMIN_OK) return
+      if (.not. has_value) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+
+      if (len_trim(prefix) == 0) then
+        full_path = trim(unquote(key))
+      else
+        full_path = trim(prefix) // '.' // trim(unquote(key))
+      end if
+
+      if (starts_with(trim(adjustl(value)), '{')) then
+        call upsert_metadata_entry(list, trim(full_path), '', .true., status)
+        if (status /= GLAMIN_OK) return
+        call parse_inline_metadata_object_append(list, trim(adjustl(value)), trim(full_path), status)
+        if (status /= GLAMIN_OK) return
+      else
+        call yaml_value_to_json(value, value_json, status)
+        if (status /= GLAMIN_OK) return
+        call upsert_metadata_entry(list, trim(full_path), trim(value_json), .false., status)
+        if (status /= GLAMIN_OK) return
+      end if
+
+      if (delim_pos == 0) exit
+      start_pos = delim_pos + 1
+    end do
+  end subroutine parse_inline_metadata_object
+
+  recursive subroutine parse_inline_metadata_object_append(list, raw_value, prefix, status)
+    type(MetadataEntry), allocatable, intent(inout) :: list(:)
+    character(len=*), intent(in) :: raw_value
+    character(len=*), intent(in) :: prefix
+    integer(int32), intent(out) :: status
+    character(len=STR_LEN) :: inner
+    character(len=STR_LEN) :: item
+    character(len=STR_LEN) :: key
+    character(len=STR_LEN) :: value
+    character(len=:), allocatable :: full_path
+    character(len=:), allocatable :: value_json
+    integer :: start_pos
+    integer :: delim_pos
+    logical :: has_value
+
+    status = GLAMIN_OK
+    inner = trim(adjustl(raw_value))
+    if (.not. starts_with(inner, '{') .or. inner(len_trim(inner):len_trim(inner)) /= '}') then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (len_trim(inner) <= 2) return
+
+    inner = trim(adjustl(inner(2:len_trim(inner) - 1)))
+    start_pos = 1
+    do
+      delim_pos = find_top_level_delimiter(inner, start_pos, ',')
+      if (delim_pos == 0) then
+        item = trim(adjustl(inner(start_pos:)))
+      else
+        item = trim(adjustl(inner(start_pos:delim_pos - 1)))
+      end if
+
+      if (len_trim(item) == 0) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+
+      call split_inline_key_value(item, key, value, has_value, status)
+      if (status /= GLAMIN_OK) return
+      if (.not. has_value) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+
+      full_path = trim(prefix) // '.' // trim(unquote(key))
+      if (starts_with(trim(adjustl(value)), '{')) then
+        call upsert_metadata_entry(list, trim(full_path), '', .true., status)
+        if (status /= GLAMIN_OK) return
+        call parse_inline_metadata_object_append(list, trim(adjustl(value)), trim(full_path), status)
+        if (status /= GLAMIN_OK) return
+      else
+        call yaml_value_to_json(value, value_json, status)
+        if (status /= GLAMIN_OK) return
+        call upsert_metadata_entry(list, trim(full_path), trim(value_json), .false., status)
+        if (status /= GLAMIN_OK) return
+      end if
+
+      if (delim_pos == 0) exit
+      start_pos = delim_pos + 1
+    end do
+  end subroutine parse_inline_metadata_object_append
+
+  subroutine parse_metadata_line(list, root_indent, indent, line, state, status)
+    type(MetadataEntry), allocatable, intent(inout) :: list(:)
+    integer, intent(in) :: root_indent
+    integer, intent(in) :: indent
+    character(len=*), intent(in) :: line
+    type(MetadataState), intent(inout) :: state
+    integer(int32), intent(out) :: status
+    character(len=STR_LEN) :: key
+    character(len=STR_LEN) :: value
+    character(len=:), allocatable :: value_json
+    character(len=:), allocatable :: full_path
+    logical :: has_value
+    integer :: depth
+
+    call prune_metadata_state(state, indent)
+    call split_key_value(line, key, value, has_value, status)
+    if (status /= GLAMIN_OK) return
+
+    if (.not. allocated(state%frames)) then
+      if (indent /= root_indent) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+    else
+      depth = size(state%frames)
+      if (indent > state%frames(depth)%indent + 2) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+    end if
+
+    if (.not. has_value) then
+      full_path = metadata_path_for(state, trim(key))
+      call upsert_metadata_entry(list, trim(full_path), '', .true., status)
+      if (status /= GLAMIN_OK) return
+      call push_metadata_frame(state, indent, trim(key))
+      return
+    end if
+
+    call yaml_value_to_json(value, value_json, status)
+    if (status /= GLAMIN_OK) return
+
+    full_path = metadata_path_for(state, trim(key))
+    call upsert_metadata_entry(list, trim(full_path), trim(value_json), .false., status)
+  end subroutine parse_metadata_line
+
+  recursive subroutine yaml_value_to_json(raw_value, json, status)
+    character(len=*), intent(in) :: raw_value
+    character(len=:), allocatable, intent(out) :: json
+    integer(int32), intent(out) :: status
+    character(len=STR_LEN) :: value
+    real(real64) :: number
+    integer :: io_status
+
+    json = ''
+    value = trim(adjustl(raw_value))
+    status = GLAMIN_OK
+
+    if (len_trim(value) == 0) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (starts_with(value, '{')) then
+      call inline_object_to_json(value, json, status)
+      return
+    end if
+
+    if (starts_with(value, '[')) then
+      call inline_array_to_json(value, json, status)
+      return
+    end if
+
+    if (value(1:1) == '"' .or. value(1:1) == '''') then
+      json = json_quote(unquote(value))
+      return
+    end if
+
+    select case (lowercase(value))
+    case ('true', 'false', 'null')
+      json = trim(lowercase(value))
+      return
+    case default
+    end select
+
+    read(value, *, iostat=io_status) number
+    if (io_status == 0) then
+      json = trim(value)
+    else
+      json = json_quote(value)
+    end if
+  end subroutine yaml_value_to_json
+
+  recursive subroutine inline_array_to_json(raw_value, json, status)
+    character(len=*), intent(in) :: raw_value
+    character(len=:), allocatable, intent(out) :: json
+    integer(int32), intent(out) :: status
+    character(len=STR_LEN) :: inner
+    character(len=STR_LEN) :: item
+    integer :: start_pos
+    integer :: delim_pos
+    character(len=:), allocatable :: item_json
+
+    status = GLAMIN_OK
+    json = ''
+
+    inner = trim(adjustl(raw_value))
+    if (.not. starts_with(inner, '[') .or. inner(len_trim(inner):len_trim(inner)) /= ']') then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (len_trim(inner) <= 2) then
+      json = '[]'
+      return
+    end if
+
+    inner = trim(adjustl(inner(2:len_trim(inner) - 1)))
+    json = '['
+    start_pos = 1
+    do
+      delim_pos = find_top_level_delimiter(inner, start_pos, ',')
+      if (delim_pos == 0) then
+        item = trim(adjustl(inner(start_pos:)))
+        if (len_trim(item) == 0) then
+          status = GLAMIN_ERR_INVALID_ARG
+          return
+        end if
+        call yaml_value_to_json(item, item_json, status)
+        if (status /= GLAMIN_OK) return
+        if (len(json) > 1) json = json // ','
+        json = json // trim(item_json)
+        exit
+      else
+        item = trim(adjustl(inner(start_pos:delim_pos - 1)))
+        if (len_trim(item) == 0) then
+          status = GLAMIN_ERR_INVALID_ARG
+          return
+        end if
+        call yaml_value_to_json(item, item_json, status)
+        if (status /= GLAMIN_OK) return
+        if (len(json) > 1) json = json // ','
+        json = json // trim(item_json)
+        start_pos = delim_pos + 1
+      end if
+    end do
+    json = json // ']'
+  end subroutine inline_array_to_json
+
+  recursive subroutine inline_object_to_json(raw_value, json, status)
+    character(len=*), intent(in) :: raw_value
+    character(len=:), allocatable, intent(out) :: json
+    integer(int32), intent(out) :: status
+    character(len=STR_LEN) :: inner
+    character(len=STR_LEN) :: item
+    character(len=STR_LEN) :: key
+    character(len=STR_LEN) :: value
+    character(len=:), allocatable :: value_json
+    integer :: start_pos
+    integer :: delim_pos
+    logical :: has_value
+
+    status = GLAMIN_OK
+    json = ''
+
+    inner = trim(adjustl(raw_value))
+    if (.not. starts_with(inner, '{') .or. inner(len_trim(inner):len_trim(inner)) /= '}') then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    if (len_trim(inner) <= 2) then
+      json = '{}'
+      return
+    end if
+
+    inner = trim(adjustl(inner(2:len_trim(inner) - 1)))
+    json = '{'
+    start_pos = 1
+    do
+      delim_pos = find_top_level_delimiter(inner, start_pos, ',')
+      if (delim_pos == 0) then
+        item = trim(adjustl(inner(start_pos:)))
+      else
+        item = trim(adjustl(inner(start_pos:delim_pos - 1)))
+      end if
+
+      if (len_trim(item) == 0) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+
+      call split_inline_key_value(item, key, value, has_value, status)
+      if (status /= GLAMIN_OK) return
+      if (.not. has_value) then
+        status = GLAMIN_ERR_INVALID_ARG
+        return
+      end if
+
+      call yaml_value_to_json(value, value_json, status)
+      if (status /= GLAMIN_OK) return
+
+      if (len(json) > 1) json = json // ','
+      json = json // json_quote(unquote(key)) // ': ' // trim(value_json)
+
+      if (delim_pos == 0) exit
+      start_pos = delim_pos + 1
+    end do
+    json = json // '}'
+  end subroutine inline_object_to_json
+
+  subroutine split_inline_key_value(line, key, value, has_value, status)
+    character(len=*), intent(in) :: line
+    character(len=STR_LEN), intent(out) :: key
+    character(len=STR_LEN), intent(out) :: value
+    logical, intent(out) :: has_value
+    integer(int32), intent(out) :: status
+    integer :: colon_pos
+
+    key = ''
+    value = ''
+    has_value = .false.
+    status = GLAMIN_OK
+
+    colon_pos = find_top_level_delimiter(line, 1, ':')
+    if (colon_pos == 0) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    key = trim(adjustl(line(:colon_pos - 1)))
+    if (colon_pos < len_trim(line)) then
+      value = trim(adjustl(line(colon_pos + 1:)))
+      has_value = len_trim(value) > 0
+    end if
+  end subroutine split_inline_key_value
+
+  integer function find_top_level_delimiter(text, start_pos, delimiter) result(pos)
+    character(len=*), intent(in) :: text
+    integer, intent(in) :: start_pos
+    character(len=1), intent(in) :: delimiter
+    integer :: idx
+    integer :: brace_depth
+    integer :: bracket_depth
+    logical :: in_quote
+    character(len=1) :: quote_char
+
+    pos = 0
+    brace_depth = 0
+    bracket_depth = 0
+    in_quote = .false.
+    quote_char = ' '
+
+    do idx = start_pos, len_trim(text)
+      if (in_quote) then
+        if (text(idx:idx) == quote_char) in_quote = .false.
+        cycle
+      end if
+
+      select case (text(idx:idx))
+      case ('"', '''')
+        in_quote = .true.
+        quote_char = text(idx:idx)
+      case ('{')
+        brace_depth = brace_depth + 1
+      case ('}')
+        brace_depth = max(0, brace_depth - 1)
+      case ('[')
+        bracket_depth = bracket_depth + 1
+      case (']')
+        bracket_depth = max(0, bracket_depth - 1)
+      case default
+        if (text(idx:idx) == delimiter .and. brace_depth == 0 .and. bracket_depth == 0) then
+          pos = idx
+          return
+        end if
+      end select
+    end do
+  end function find_top_level_delimiter
+
+  integer function find_yaml_comment_mark(text) result(pos)
+    character(len=*), intent(in) :: text
+    integer :: idx
+    logical :: in_quote
+    character(len=1) :: quote_char
+
+    pos = 0
+    in_quote = .false.
+    quote_char = ' '
+
+    do idx = 1, len_trim(text)
+      if (in_quote) then
+        if (text(idx:idx) == quote_char) in_quote = .false.
+        cycle
+      end if
+
+      select case (text(idx:idx))
+      case ('"', '''')
+        in_quote = .true.
+        quote_char = text(idx:idx)
+      case ('#')
+        if (idx == 1) then
+          pos = idx
+          return
+        end if
+        if (text(idx - 1:idx - 1) == ' ' .or. text(idx - 1:idx - 1) == achar(9)) then
+          pos = idx
+          return
+        end if
+      case default
+      end select
+    end do
+  end function find_yaml_comment_mark
 
   function unquote(value) result(cleaned)
     character(len=*), intent(in) :: value
@@ -1525,6 +2170,8 @@ contains
       call append_json_member(json, 'text', json_quote(values(idx)%text), first)
       if (allocated(values(idx)%tags)) call append_json_member(json, 'tags', &
         string_array_to_json(values(idx)%tags), first)
+      if (allocated(values(idx)%metadata)) call append_json_member(json, 'metadata', &
+        metadata_to_json(values(idx)%metadata), first)
       json = json // '}'
     end do
     json = json // ']'
@@ -1574,10 +2221,122 @@ contains
         string_array_to_json(values(idx)%timestamps), first)
       if (len_trim(values(idx)%notes) > 0) call append_json_member(json, 'notes', &
         json_quote(values(idx)%notes), first)
+      if (allocated(values(idx)%metadata)) call append_json_member(json, 'metadata', &
+        metadata_to_json(values(idx)%metadata), first)
       json = json // '}'
     end do
     json = json // ']'
   end function traces_to_json
+
+  function metadata_to_json(values) result(json)
+    type(MetadataEntry), intent(in) :: values(:)
+    character(len=:), allocatable :: json
+    call metadata_to_json_impl(values, '', json)
+  end function metadata_to_json
+
+  recursive subroutine metadata_to_json_impl(values, prefix, json)
+    type(MetadataEntry), intent(in) :: values(:)
+    character(len=*), intent(in) :: prefix
+    character(len=:), allocatable, intent(out) :: json
+    integer :: idx
+    integer :: entry_idx
+    character(len=:), allocatable :: value_json
+    character(len=STR_LEN), allocatable :: child_paths(:)
+    character(len=STR_LEN) :: child_path
+    character(len=STR_LEN) :: key
+    logical :: is_child
+
+    do idx = 1, size(values)
+      call metadata_immediate_child(values(idx)%path, prefix, child_path, is_child)
+      if (is_child) call append_unique_string(child_paths, child_path)
+    end do
+
+    json = '{'
+    if (allocated(child_paths)) then
+      do idx = 1, size(child_paths)
+        if (idx > 1) json = json // ','
+        entry_idx = find_metadata_entry_value(values, child_paths(idx))
+        if (entry_idx > 0 .and. .not. values(entry_idx)%is_object) then
+          if (allocated(values(entry_idx)%value_json)) then
+            value_json = trim(values(entry_idx)%value_json)
+          else
+            value_json = 'null'
+          end if
+        else
+          call metadata_to_json_impl(values, trim(child_paths(idx)), value_json)
+        end if
+        key = metadata_leaf_key(child_paths(idx))
+        json = json // json_quote(key) // ': ' // trim(value_json)
+      end do
+    end if
+    json = json // '}'
+  end subroutine metadata_to_json_impl
+
+  subroutine metadata_immediate_child(path, prefix, child_path, is_child)
+    character(len=*), intent(in) :: path
+    character(len=*), intent(in) :: prefix
+    character(len=STR_LEN), intent(out) :: child_path
+    logical, intent(out) :: is_child
+    character(len=STR_LEN) :: remainder
+    integer :: dot_pos
+    integer :: prefix_len
+
+    child_path = ''
+    is_child = .false.
+    if (len_trim(path) == 0) return
+
+    if (len_trim(prefix) == 0) then
+      dot_pos = index(trim(path), '.')
+      if (dot_pos == 0) then
+        child_path = trim(path)
+      else
+        child_path = trim(path(:dot_pos - 1))
+      end if
+      is_child = .true.
+      return
+    end if
+
+    if (trim(path) == trim(prefix)) return
+    if (.not. starts_with(trim(path), trim(prefix) // '.')) return
+
+    prefix_len = len_trim(prefix)
+    remainder = trim(path(prefix_len + 2:))
+    dot_pos = index(trim(remainder), '.')
+    if (dot_pos == 0) then
+      child_path = trim(prefix) // '.' // trim(remainder)
+    else
+      child_path = trim(prefix) // '.' // trim(remainder(:dot_pos - 1))
+    end if
+    is_child = .true.
+  end subroutine metadata_immediate_child
+
+  function metadata_leaf_key(path) result(key)
+    character(len=*), intent(in) :: path
+    character(len=STR_LEN) :: key
+    integer :: dot_pos
+
+    key = trim(path)
+    dot_pos = scan(trim(path), '.', back=.true.)
+    if (dot_pos > 0) key = trim(path(dot_pos + 1:))
+  end function metadata_leaf_key
+
+  subroutine append_unique_string(list, value)
+    character(len=STR_LEN), allocatable, intent(inout) :: list(:)
+    character(len=*), intent(in) :: value
+    integer :: idx
+
+    if (.not. allocated(list)) then
+      allocate(list(1))
+      list(1) = trim(value)
+      return
+    end if
+
+    do idx = 1, size(list)
+      if (trim(list(idx)) == trim(value)) return
+    end do
+
+    call append_string(list, trim(value))
+  end subroutine append_unique_string
 
   function embedder_to_json(value, include_signature) result(json)
     type(EmbedderAuthoring), intent(in) :: value
