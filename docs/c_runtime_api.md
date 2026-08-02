@@ -3,9 +3,10 @@
 ## Status
 
 The C runtime API is experimental and versioned independently from Glamin's
-pure Fortran modules. ABI version 3 provides worker-runtime lifecycle,
+pure Fortran modules. ABI version 4 provides worker-runtime lifecycle,
 diagnostics, synchronous float32 flat-index add and search, and immutable
-generation activation, pinning, retirement, and pinned search. Request,
+generation activation, pinning, retirement, and pinned search. It also loads
+compiler-emitted flat-index artifacts with space-contract validation. Request,
 snapshot, manifold, and trace handles remain future extensions.
 
 Include `include/glamin_runtime.h` and link the Glamin static library with the
@@ -94,6 +95,43 @@ as diagnostics.
 Generation and pin registry operations are externally serialized in this ABI
 revision. Each runtime has at most one active generation. The fixed registries
 support 256 generations and 1024 pins process-wide.
+
+## Persistent Flat Artifacts
+
+ABI version 4 loads one named space from a compiler-emitted artifact directory:
+
+```c
+glamin_index_t index = 0;
+uint32_t dimension = 0;
+uint64_t vector_count = 0;
+
+status = glamin_flat_index_load_artifact(
+    runtime,
+    "build/specs",
+    11,
+    "geometry.auth",
+    13,
+    GLAMIN_METRIC_L2,
+    &index,
+    &dimension,
+    &vector_count);
+```
+
+The directory must contain `vector_layout.json`, `vectors.bin`, and
+`contracts.json`. Loading validates that the requested space exists, its
+dimension and metric match the layout and requested metric, normalization is
+declared, and the SHA-256 hash of the canonical space contract matches its
+recorded `contract_hash`. The embedder contract and any registered hash or
+signature validators are also applied.
+
+The loaded index has the same ownership as a created flat index. It may be
+searched directly, published through `glamin_generation_create`, and finally
+released with `glamin_index_destroy` after generation reclamation.
+
+Artifact files must remain unchanged for the duration of a load. ABI version 4
+does not yet bind the vector file and layout to checksums in a generation
+manifest; it validates compatibility and the space-contract hash, not complete
+artifact provenance.
 
 ## Diagnostics
 

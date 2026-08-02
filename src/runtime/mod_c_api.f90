@@ -25,6 +25,7 @@ module glamin_c_api
   public :: c_api_set_runtime_error
   public :: c_api_clear_runtime_error
   public :: c_api_bind_index_generation
+  public :: c_api_register_loaded_flat_index
   public :: c_api_unbind_index_generation
 
   integer(int32), parameter :: MAX_RUNTIME_COUNT = 64_int32
@@ -34,7 +35,7 @@ module glamin_c_api
     int(storage_size(0.0_real32) / 8, int64)
   integer(int64), parameter :: MAX_FLOAT_ELEMENTS = &
     (huge(0_int64) - modulo(huge(0_int64), FLOAT_BYTES)) / FLOAT_BYTES
-  integer(c_int32_t), parameter :: GLAMIN_ABI_VERSION = 3_c_int32_t
+  integer(c_int32_t), parameter :: GLAMIN_ABI_VERSION = 4_c_int32_t
   integer(c_int32_t), parameter :: GLAMIN_STATUS_BUFFER_TOO_SMALL = 6_c_int32_t
 
   type :: RuntimeSlot
@@ -682,6 +683,46 @@ contains
     index_slots(slot_index)%generation_handle = generation_handle
     status = GLAMIN_OK
   end subroutine c_api_bind_index_generation
+
+  subroutine c_api_register_loaded_flat_index(runtime_handle, native_handle, &
+      dimension, vector_count, metric, index_handle, status)
+    integer(int64), intent(in) :: runtime_handle
+    type(IndexHandle), intent(in) :: native_handle
+    integer(int32), intent(in) :: dimension
+    integer(int64), intent(in) :: vector_count
+    integer(int32), intent(in) :: metric
+    integer(int64), intent(out) :: index_handle
+    integer(int32), intent(out) :: status
+    integer(int32) :: runtime_slot_index
+    integer(int32) :: slot_index
+
+    index_handle = 0_int64
+    runtime_slot_index = find_runtime_slot(runtime_handle)
+    if (runtime_slot_index == 0_int32 .or. dimension <= 0_int32 .or. &
+        vector_count <= 0_int64 .or. vector_count > int(huge(0_int32), int64)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    slot_index = find_free_index_slot()
+    if (slot_index == 0_int32 .or. next_index_handle == huge(next_index_handle)) then
+      status = GLAMIN_ERR_OOM
+      return
+    end if
+
+    index_slots(slot_index)%native_handle = native_handle
+    index_slots(slot_index)%handle = next_index_handle
+    index_slots(slot_index)%owner_runtime = runtime_handle
+    index_slots(slot_index)%generation_handle = 0_int64
+    index_slots(slot_index)%vector_count = vector_count
+    index_slots(slot_index)%dimension = dimension
+    index_slots(slot_index)%metric = metric
+    index_slots(slot_index)%is_used = .true.
+    index_handle = next_index_handle
+    next_index_handle = next_index_handle + 1_int64
+    runtime_slots(runtime_slot_index)%last_error = ''
+    status = GLAMIN_OK
+  end subroutine c_api_register_loaded_flat_index
 
   subroutine c_api_unbind_index_generation(runtime_handle, index_handle, &
       generation_handle, status)

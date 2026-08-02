@@ -1,9 +1,8 @@
 module glamin_vector_io
   use iso_fortran_env, only: int32, int64, real32
-  use iso_c_binding, only: c_associated, c_null_ptr, c_ptr
+  use iso_c_binding, only: c_associated, c_f_pointer, c_null_ptr, c_ptr, c_size_t
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG
-  use glamin_memory, only: free_aligned
-  use glamin_stream, only: IoStream, open_stream, close_stream, read_bytes, stream_seek
+  use glamin_memory, only: allocate_aligned, free_aligned
   use glamin_types, only: VectorBlock
   implicit none
   private
@@ -31,8 +30,11 @@ contains
     integer(int64), intent(in) :: offset_bytes
     type(VectorBlock), intent(inout) :: block
     integer(int32), intent(out) :: status
-    type(IoStream) :: stream
     type(c_ptr) :: buffer
+    real(real32), pointer :: values(:)
+    integer :: io_status
+    integer :: unit
+    integer(int64) :: element_count
     integer(int32) :: free_status
     integer(int64) :: total_bytes
     integer(int32) :: elem_size
@@ -56,14 +58,34 @@ contains
     end if
 
     elem_size = int(storage_size(0.0_real32) / 8, int32)
-    total_bytes = int(dim, int64) * count * int(elem_size, int64)
-
-    call open_stream(stream, path, "rb")
-    if (offset_bytes > 0_int64) then
-      call stream_seek(stream, offset_bytes)
+    if (count > int(huge(0_int32), int64) / int(dim, int64)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
     end if
-    call read_bytes(stream, buffer, total_bytes)
-    call close_stream(stream)
+    element_count = int(dim, int64) * count
+    if (element_count > huge(0_int64) / int(elem_size, int64)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+    total_bytes = element_count * int(elem_size, int64)
+
+    call allocate_aligned(buffer, int(total_bytes, c_size_t), &
+      int(VECTOR_ALIGNMENT, c_size_t), status)
+    if (status /= GLAMIN_OK) return
+    call c_f_pointer(buffer, values, [int(element_count, int32)])
+
+    open(newunit=unit, file=path, status='old', action='read', access='stream', &
+      form='unformatted', iostat=io_status)
+    if (io_status == 0) then
+      read(unit, pos=offset_bytes + 1_int64, iostat=io_status) values
+      close(unit, iostat=free_status)
+      if (io_status == 0 .and. free_status /= 0) io_status = free_status
+    end if
+    if (io_status /= 0) then
+      call free_aligned(buffer, free_status)
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
 
     block%data = buffer
     block%length = count

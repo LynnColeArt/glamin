@@ -32,6 +32,7 @@
   - `mod_queue.f90`: job queue implementation
   - `mod_runtime.f90`: runtime context and submission helpers
   - `mod_c_api.f90`: versioned C ABI runtime/index handles and diagnostics
+  - `mod_c_load_api.f90`: contract-validated persistent flat artifact loading
   - `mod_c_generation_api.f90`: immutable C ABI generations, pins, and search
   - `mod_worker_pool.f90`: worker pool control and lifecycle
   - `thread_pool.c`: pthread-backed job execution

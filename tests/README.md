@@ -14,4 +14,5 @@ Current targets:
 - `make test-async` — Async IVF train/add/search and HNSW snapshot smoke tests.
 - `make test-distance` — L2/IP distance kernel smoke test.
 - `make test-c-abi` — C ABI runtime/index ownership, diagnostics, strided add,
-  flat search, and immutable generation activation/pin/rollback smoke tests.
+  flat search, immutable generation activation/pin/rollback, and persistent
+  artifact contract-rejection smoke tests.

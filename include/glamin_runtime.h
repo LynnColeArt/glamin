@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define GLAMIN_ABI_VERSION 3u
+#define GLAMIN_ABI_VERSION 4u
 
 typedef uint64_t glamin_runtime_t;
 typedef uint64_t glamin_index_t;
@@ -40,6 +40,17 @@ glamin_status glamin_flat_index_create(glamin_runtime_t runtime,
                                        uint32_t dimension,
                                        glamin_metric metric,
                                        glamin_index_t *out_index);
+
+glamin_status glamin_flat_index_load_artifact(
+    glamin_runtime_t runtime,
+    const char *artifact_directory,
+    uint64_t artifact_directory_length,
+    const char *space_id,
+    uint64_t space_id_length,
+    glamin_metric metric,
+    glamin_index_t *out_index,
+    uint32_t *out_dimension,
+    uint64_t *out_vector_count);
 
 glamin_status glamin_index_destroy(glamin_runtime_t runtime,
                                    glamin_index_t index);

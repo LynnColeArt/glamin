@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Added ABI version 4 with persistent flat artifact loading, space-contract
+  compatibility checks, canonical contract-hash validation, and safe C ABI
+  failures for missing vector files.
 - Added ABI version 3 with immutable generation creation, activation,
   deactivation, stable pins, retirement, label retrieval, and pinned flat-index
   search.

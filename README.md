@@ -32,6 +32,7 @@ See [Roadmap](#status) for current phase.
 - Contract-enforced vector space integrity.
 - Versioned C ABI for runtime lifecycle, flat-index search, and immutable
   generations.
+- Contract-validated persistent flat artifact loading through C ABI version 4.
 
 ---
 
