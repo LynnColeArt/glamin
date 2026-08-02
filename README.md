@@ -21,6 +21,7 @@ See [Roadmap](#status) for current phase.
 - `docs/geometry_diff.md`
 - `docs/geometry_authoring.md`
 - `docs/gpu_backends.md`
+- `docs/c_runtime_api.md`
 
 ---
 
@@ -29,6 +30,7 @@ See [Roadmap](#status) for current phase.
 - Async request lifecycle (submit/poll/wait/cancel).
 - FAISS-compatible IO for Flat/PQ/IVF/IVFPQ/HNSW.
 - Contract-enforced vector space integrity.
+- Versioned C ABI for runtime lifecycle and diagnostics.
 
 ---
 
@@ -211,6 +213,9 @@ Glamin Runtime
 
 ## Language Bindings
 
+**Implemented:**
+- **C runtime ABI** — Version query, worker-runtime lifecycle, and diagnostics
+
 **Planned:**
 - **Go** — Systems integration, microservices
 - **Rust** — Performance-critical applications, WASM targets
@@ -257,6 +262,12 @@ Async IVF + HNSW snapshot smoke tests:
 
 ```bash
 make test-async
+```
+
+C runtime ABI smoke test:
+
+```bash
+make test-c-abi
 ```
 
 Distance kernel smoke test:
