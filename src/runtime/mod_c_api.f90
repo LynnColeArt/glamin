@@ -21,6 +21,11 @@ module glamin_c_api
   public :: glamin_index_add_f32_c
   public :: glamin_index_search_f32_c
   public :: glamin_last_error_c
+  public :: c_api_runtime_is_active
+  public :: c_api_set_runtime_error
+  public :: c_api_clear_runtime_error
+  public :: c_api_bind_index_generation
+  public :: c_api_unbind_index_generation
 
   integer(int32), parameter :: MAX_RUNTIME_COUNT = 64_int32
   integer(int32), parameter :: MAX_INDEX_COUNT = 256_int32
@@ -29,7 +34,7 @@ module glamin_c_api
     int(storage_size(0.0_real32) / 8, int64)
   integer(int64), parameter :: MAX_FLOAT_ELEMENTS = &
     (huge(0_int64) - modulo(huge(0_int64), FLOAT_BYTES)) / FLOAT_BYTES
-  integer(c_int32_t), parameter :: GLAMIN_ABI_VERSION = 2_c_int32_t
+  integer(c_int32_t), parameter :: GLAMIN_ABI_VERSION = 3_c_int32_t
   integer(c_int32_t), parameter :: GLAMIN_STATUS_BUFFER_TOO_SMALL = 6_c_int32_t
 
   type :: RuntimeSlot
@@ -43,6 +48,7 @@ module glamin_c_api
     type(IndexHandle) :: native_handle
     integer(int64) :: handle = 0_int64
     integer(int64) :: owner_runtime = 0_int64
+    integer(int64) :: generation_handle = 0_int64
     integer(int64) :: vector_count = 0_int64
     integer(int32) :: dimension = 0_int32
     integer(int32) :: metric = 0_int32
@@ -249,6 +255,13 @@ contains
       return
     end if
 
+    if (index_slots(slot_index)%generation_handle /= 0_int64) then
+      runtime_slots(runtime_slot_index)%last_error = &
+        "index belongs to a mounted or pinned generation"
+      status = int(GLAMIN_ERR_NOT_READY, c_int32_t)
+      return
+    end if
+
     call flat_destroy_handle(index_slots(slot_index)%native_handle, index_status)
     if (index_status /= GLAMIN_OK) then
       runtime_slots(runtime_slot_index)%last_error = "failed to destroy flat index"
@@ -286,6 +299,13 @@ contains
       runtime_slots(runtime_slot_index)%last_error = &
         "index handle is invalid or is owned by a different runtime"
       status = int(GLAMIN_ERR_INVALID_ARG, c_int32_t)
+      return
+    end if
+
+    if (index_slots(slot_index)%generation_handle /= 0_int64) then
+      runtime_slots(runtime_slot_index)%last_error = &
+        "cannot add vectors after an index is mounted as a generation"
+      status = int(GLAMIN_ERR_NOT_READY, c_int32_t)
       return
     end if
 
@@ -610,6 +630,77 @@ contains
     end if
     block = VectorBlock()
   end subroutine release_vector_block
+
+  function c_api_runtime_is_active(runtime_handle) result(is_active)
+    integer(int64), intent(in) :: runtime_handle
+    logical :: is_active
+
+    is_active = find_runtime_slot(runtime_handle) /= 0_int32
+  end function c_api_runtime_is_active
+
+  subroutine c_api_set_runtime_error(runtime_handle, message)
+    integer(int64), intent(in) :: runtime_handle
+    character(len=*), intent(in) :: message
+    integer(int32) :: slot_index
+
+    slot_index = find_runtime_slot(runtime_handle)
+    if (slot_index == 0_int32) then
+      call set_global_error(message)
+      return
+    end if
+    runtime_slots(slot_index)%last_error = message
+  end subroutine c_api_set_runtime_error
+
+  subroutine c_api_clear_runtime_error(runtime_handle)
+    integer(int64), intent(in) :: runtime_handle
+    integer(int32) :: slot_index
+
+    slot_index = find_runtime_slot(runtime_handle)
+    if (slot_index /= 0_int32) then
+      runtime_slots(slot_index)%last_error = ""
+    end if
+  end subroutine c_api_clear_runtime_error
+
+  subroutine c_api_bind_index_generation(runtime_handle, index_handle, &
+      generation_handle, status)
+    integer(int64), intent(in) :: runtime_handle
+    integer(int64), intent(in) :: index_handle
+    integer(int64), intent(in) :: generation_handle
+    integer(int32), intent(out) :: status
+    integer(int32) :: slot_index
+
+    slot_index = find_index_slot(runtime_handle, index_handle)
+    if (slot_index == 0_int32 .or. generation_handle == 0_int64) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+    if (index_slots(slot_index)%generation_handle /= 0_int64) then
+      status = GLAMIN_ERR_NOT_READY
+      return
+    end if
+
+    index_slots(slot_index)%generation_handle = generation_handle
+    status = GLAMIN_OK
+  end subroutine c_api_bind_index_generation
+
+  subroutine c_api_unbind_index_generation(runtime_handle, index_handle, &
+      generation_handle, status)
+    integer(int64), intent(in) :: runtime_handle
+    integer(int64), intent(in) :: index_handle
+    integer(int64), intent(in) :: generation_handle
+    integer(int32), intent(out) :: status
+    integer(int32) :: slot_index
+
+    slot_index = find_index_slot(runtime_handle, index_handle)
+    if (slot_index == 0_int32 .or. &
+        index_slots(slot_index)%generation_handle /= generation_handle) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    index_slots(slot_index)%generation_handle = 0_int64
+    status = GLAMIN_OK
+  end subroutine c_api_unbind_index_generation
 
   subroutine set_global_error(message)
     character(len=*), intent(in) :: message

@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Added ABI version 3 with immutable generation creation, activation,
+  deactivation, stable pins, retirement, label retrieval, and pinned flat-index
+  search.
 - Added ABI version 2 with runtime-owned flat-index creation, synchronous
   float32 add/search, caller-owned results, and zero-based row labels.
 

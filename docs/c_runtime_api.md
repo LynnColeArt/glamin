@@ -3,9 +3,10 @@
 ## Status
 
 The C runtime API is experimental and versioned independently from Glamin's
-pure Fortran modules. ABI version 2 provides worker-runtime lifecycle,
-diagnostics, and synchronous float32 flat-index add and search. Request,
-snapshot, manifold, generation, and trace handles remain future extensions.
+pure Fortran modules. ABI version 3 provides worker-runtime lifecycle,
+diagnostics, synchronous float32 flat-index add and search, and immutable
+generation activation, pinning, retirement, and pinned search. Request,
+snapshot, manifold, and trace handles remain future extensions.
 
 Include `include/glamin_runtime.h` and link the Glamin static library with the
 Fortran, pthread, and OpenMP runtimes used to build it.
@@ -57,6 +58,43 @@ indexed rows.
 L2 distances are squared Euclidean distances. Inner-product searches return
 the largest dot products first.
 
+## Immutable Generations
+
+ABI version 3 binds a populated flat index to an immutable generation:
+
+```c
+glamin_generation_t generation = 0;
+glamin_generation_pin_t pin = 0;
+glamin_generation_t pinned_generation = 0;
+
+status = glamin_generation_create(
+    runtime, index, "behavior-a", 10, &generation);
+status = glamin_generation_activate(runtime, generation);
+status = glamin_generation_pin_active(
+    runtime, &pin, &pinned_generation);
+status = glamin_generation_search_f32(
+    runtime, pin, query, 1, 2, 1, distances, labels);
+status = glamin_generation_unpin(runtime, pin);
+status = glamin_generation_deactivate(runtime);
+status = glamin_generation_retire(runtime, generation);
+```
+
+Generation creation freezes its index: add and destroy return
+`GLAMIN_STATUS_NOT_READY` until the generation is reclaimed. Activating a new
+generation changes future pins only. Existing pins continue to search the exact
+generation they resolved, including after that generation is retired.
+
+An active generation must be superseded or deactivated before retirement.
+Retirement prevents future activation and reclaims immediately when no pins
+exist. Otherwise reclamation waits for the last unpin. Reclamation unbinds the
+index so the caller can destroy it. Labels contain 1 to 128 non-null bytes and
+can be copied with `glamin_generation_label` using the same size-query pattern
+as diagnostics.
+
+Generation and pin registry operations are externally serialized in this ABI
+revision. Each runtime has at most one active generation. The fixed registries
+support 256 generations and 1024 pins process-wide.
+
 ## Diagnostics
 
 `glamin_last_error` copies a null-terminated diagnostic into caller-owned
@@ -81,4 +119,5 @@ make test-c-abi
 
 The smoke tests verify ABI versioning, invalid-argument diagnostics, worker-pool
 startup and shutdown, stale handles, runtime/index ownership, strided vector
-adds, and exact flat-search labels and distances.
+adds, exact flat-search results, immutable generation indexes, stable old pins,
+retirement, reclamation, and deterministic rollback.

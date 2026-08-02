@@ -30,7 +30,8 @@ See [Roadmap](#status) for current phase.
 - Async request lifecycle (submit/poll/wait/cancel).
 - FAISS-compatible IO for Flat/PQ/IVF/IVFPQ/HNSW.
 - Contract-enforced vector space integrity.
-- Versioned C ABI for runtime lifecycle and diagnostics.
+- Versioned C ABI for runtime lifecycle, flat-index search, and immutable
+  generations.
 
 ---
 

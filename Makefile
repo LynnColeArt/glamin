@@ -32,6 +32,8 @@ TEST_C_ABI ?= $(BUILD_DIR)/c_runtime_abi_smoke
 TEST_C_ABI_OBJ ?= $(OBJ_DIR)/tests/c_runtime_abi_smoke.o
 TEST_C_FLAT_ABI ?= $(BUILD_DIR)/c_flat_index_abi_smoke
 TEST_C_FLAT_ABI_OBJ ?= $(OBJ_DIR)/tests/c_flat_index_abi_smoke.o
+TEST_C_GENERATION_ABI ?= $(BUILD_DIR)/c_generation_abi_smoke
+TEST_C_GENERATION_ABI_OBJ ?= $(OBJ_DIR)/tests/c_generation_abi_smoke.o
 BENCH_DISTANCE ?= $(BUILD_DIR)/bench_distance
 BENCH_DIM ?= 256
 BENCH_QUERIES ?= 256
@@ -110,6 +112,7 @@ F90_SOURCES = \
   src/runtime/mod_async.f90 \
   src/runtime/mod_runtime.f90 \
   src/runtime/mod_c_api.f90 \
+  src/runtime/mod_c_generation_api.f90 \
   src/gpu/mod_gpu_backend.f90 \
   src/gpu/mod_cuda_ops.f90 \
   src/gpu/mod_cuda_kernels.f90 \
@@ -242,6 +245,9 @@ $(OBJ_DIR)/src/runtime/mod_c_api.o: \
 	$(OBJ_DIR)/src/common/mod_types.o \
 	$(OBJ_DIR)/src/index/mod_flat.o \
 	$(OBJ_DIR)/src/runtime/mod_runtime.o
+$(OBJ_DIR)/src/runtime/mod_c_generation_api.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/runtime/mod_c_api.o
 
 $(OBJ_DIR)/src/gpu/mod_gpu_backend.o: \
 	$(OBJ_DIR)/src/common/mod_errors.o \
@@ -317,9 +323,10 @@ test-native-hash: $(LIBRARY) $(TEST_NATIVE_HASH)
 test-spec-compiler: $(LIBRARY) $(TEST_SPEC_COMPILER)
 	$(TEST_SPEC_COMPILER)
 
-test-c-abi: $(LIBRARY) $(TEST_C_ABI) $(TEST_C_FLAT_ABI)
+test-c-abi: $(LIBRARY) $(TEST_C_ABI) $(TEST_C_FLAT_ABI) $(TEST_C_GENERATION_ABI)
 	$(TEST_C_ABI)
 	$(TEST_C_FLAT_ABI)
+	$(TEST_C_GENERATION_ABI)
 
 bench-distance: $(LIBRARY) $(BENCH_DISTANCE)
 	$(BENCH_DISTANCE) $(BENCH_DIM) $(BENCH_QUERIES) $(BENCH_VECTORS) $(BENCH_ITERS)
@@ -402,6 +409,9 @@ $(TEST_C_ABI): $(TEST_C_ABI_OBJ) $(LIBRARY)
 
 $(TEST_C_FLAT_ABI): $(TEST_C_FLAT_ABI_OBJ) $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $(TEST_C_FLAT_ABI_OBJ) $(LIBRARY)
+
+$(TEST_C_GENERATION_ABI): $(TEST_C_GENERATION_ABI_OBJ) $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $(TEST_C_GENERATION_ABI_OBJ) $(LIBRARY)
 
 $(BENCH_DISTANCE): benchmarks/distance_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)

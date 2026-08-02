@@ -7,10 +7,12 @@
 extern "C" {
 #endif
 
-#define GLAMIN_ABI_VERSION 2u
+#define GLAMIN_ABI_VERSION 3u
 
 typedef uint64_t glamin_runtime_t;
 typedef uint64_t glamin_index_t;
+typedef uint64_t glamin_generation_t;
+typedef uint64_t glamin_generation_pin_t;
 
 typedef enum glamin_status {
   GLAMIN_STATUS_OK = 0,
@@ -56,6 +58,44 @@ glamin_status glamin_index_search_f32(glamin_runtime_t runtime,
                                       uint32_t k,
                                       float *out_distances,
                                       uint64_t *out_labels);
+
+glamin_status glamin_generation_create(glamin_runtime_t runtime,
+                                       glamin_index_t index,
+                                       const char *label,
+                                       uint64_t label_length,
+                                       glamin_generation_t *out_generation);
+
+glamin_status glamin_generation_activate(glamin_runtime_t runtime,
+                                         glamin_generation_t generation);
+
+glamin_status glamin_generation_deactivate(glamin_runtime_t runtime);
+
+glamin_status glamin_generation_pin_active(
+    glamin_runtime_t runtime,
+    glamin_generation_pin_t *out_pin,
+    glamin_generation_t *out_generation);
+
+glamin_status glamin_generation_unpin(glamin_runtime_t runtime,
+                                      glamin_generation_pin_t pin);
+
+glamin_status glamin_generation_retire(glamin_runtime_t runtime,
+                                       glamin_generation_t generation);
+
+glamin_status glamin_generation_label(glamin_runtime_t runtime,
+                                      glamin_generation_t generation,
+                                      char *buffer,
+                                      uint64_t capacity,
+                                      uint64_t *out_required);
+
+glamin_status glamin_generation_search_f32(
+    glamin_runtime_t runtime,
+    glamin_generation_pin_t pin,
+    const float *queries,
+    uint64_t query_count,
+    uint32_t query_stride,
+    uint32_t k,
+    float *out_distances,
+    uint64_t *out_labels);
 
 glamin_status glamin_last_error(glamin_runtime_t runtime,
                                 char *buffer,
