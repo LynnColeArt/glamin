@@ -28,6 +28,8 @@ TEST_ASYNC_HNSW ?= $(BUILD_DIR)/async_hnsw_snapshot_smoke
 TEST_DISTANCE ?= $(BUILD_DIR)/distance_smoke
 TEST_NATIVE_HASH ?= $(BUILD_DIR)/native_hash_smoke
 TEST_SPEC_COMPILER ?= $(BUILD_DIR)/spec_compiler_smoke
+TEST_C_ABI ?= $(BUILD_DIR)/c_runtime_abi_smoke
+TEST_C_ABI_OBJ ?= $(OBJ_DIR)/tests/c_runtime_abi_smoke.o
 BENCH_DISTANCE ?= $(BUILD_DIR)/bench_distance
 BENCH_DIM ?= 256
 BENCH_QUERIES ?= 256
@@ -105,6 +107,7 @@ F90_SOURCES = \
   src/runtime/mod_pipeline.f90 \
   src/runtime/mod_async.f90 \
   src/runtime/mod_runtime.f90 \
+  src/runtime/mod_c_api.f90 \
   src/gpu/mod_gpu_backend.f90 \
   src/gpu/mod_cuda_ops.f90 \
   src/gpu/mod_cuda_kernels.f90 \
@@ -230,6 +233,9 @@ $(OBJ_DIR)/src/runtime/mod_runtime.o: \
 	$(OBJ_DIR)/src/common/mod_types.o \
 	$(OBJ_DIR)/src/runtime/mod_async.o \
 	$(OBJ_DIR)/src/runtime/mod_worker_pool.o
+$(OBJ_DIR)/src/runtime/mod_c_api.o: \
+	$(OBJ_DIR)/src/common/mod_errors.o \
+	$(OBJ_DIR)/src/runtime/mod_runtime.o
 
 $(OBJ_DIR)/src/gpu/mod_gpu_backend.o: \
 	$(OBJ_DIR)/src/common/mod_errors.o \
@@ -304,6 +310,9 @@ test-native-hash: $(LIBRARY) $(TEST_NATIVE_HASH)
 
 test-spec-compiler: $(LIBRARY) $(TEST_SPEC_COMPILER)
 	$(TEST_SPEC_COMPILER)
+
+test-c-abi: $(LIBRARY) $(TEST_C_ABI)
+	$(TEST_C_ABI)
 
 bench-distance: $(LIBRARY) $(BENCH_DISTANCE)
 	$(BENCH_DISTANCE) $(BENCH_DIM) $(BENCH_QUERIES) $(BENCH_VECTORS) $(BENCH_ITERS)
@@ -381,6 +390,9 @@ $(TEST_NATIVE_HASH): tests/native_hash_smoke.f90 $(LIBRARY)
 $(TEST_SPEC_COMPILER): tests/spec_compiler_smoke.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
+$(TEST_C_ABI): $(TEST_C_ABI_OBJ) $(LIBRARY)
+	$(FC) $(FFLAGS) -o $@ $(TEST_C_ABI_OBJ) $(LIBRARY)
+
 $(BENCH_DISTANCE): benchmarks/distance_benchmark.f90 $(LIBRARY)
 	$(FC) $(FFLAGS) -o $@ $< $(LIBRARY)
 
@@ -417,7 +429,7 @@ clean:
 	test-gpu-plugin test-gpu-select test-gpu-fallback test-gpu-distance-parity \
 	test-gpu-distance-parity-vulkan test-gpu-ivf-parity test-gpu-ivf-parity-vulkan \
 	test-gpu-ivfpq-parity test-gpu-hnsw-parity test-async test-distance test-native-hash \
-	test-spec-compiler bench-distance \
+	test-spec-compiler test-c-abi bench-distance \
 	bench-gpu-distance bench-ivf bench-hnsw bench-ivfpq
 
 spec-validate: $(SPEC_TOOL)
