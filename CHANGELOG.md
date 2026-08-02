@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2026-08-02
+
+### Added
+
+- Added ABI version 2 with runtime-owned flat-index creation, synchronous
+  float32 add/search, caller-owned results, and zero-based row labels.
+
+### Fixed
+
+- Corrected flat-index append behavior for input vectors whose stride is larger
+  than their dimension.
+
 ## 2026-04-03
 
 ### Fixed

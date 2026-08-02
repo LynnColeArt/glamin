@@ -214,7 +214,7 @@ Glamin Runtime
 ## Language Bindings
 
 **Implemented:**
-- **C runtime ABI** — Version query, worker-runtime lifecycle, and diagnostics
+- **C runtime ABI** — Runtime lifecycle, diagnostics, and synchronous flat-index recall
 
 **Planned:**
 - **Go** — Systems integration, microservices
