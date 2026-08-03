@@ -30,7 +30,9 @@ See [Roadmap](#status) for current phase.
 - Async request lifecycle (submit/poll/wait/cancel).
 - FAISS-compatible IO for Flat/PQ/IVF/IVFPQ/HNSW.
 - Contract-enforced vector space integrity.
-- Versioned C ABI for runtime lifecycle and diagnostics.
+- Versioned C ABI for runtime lifecycle, flat-index search, and immutable
+  generations.
+- Contract-validated persistent flat artifact loading through C ABI version 4.
 
 ---
 
@@ -214,7 +216,7 @@ Glamin Runtime
 ## Language Bindings
 
 **Implemented:**
-- **C runtime ABI** — Version query, worker-runtime lifecycle, and diagnostics
+- **C runtime ABI** — Runtime lifecycle, diagnostics, and synchronous flat-index recall
 
 **Planned:**
 - **Go** — Systems integration, microservices

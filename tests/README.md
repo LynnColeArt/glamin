@@ -13,4 +13,6 @@ Current targets:
 - `make test-gpu-hnsw-parity` — HNSW parity with GPU backend selected.
 - `make test-async` — Async IVF train/add/search and HNSW snapshot smoke tests.
 - `make test-distance` — L2/IP distance kernel smoke test.
-- `make test-c-abi` — C ABI version, runtime lifecycle, diagnostics, and stale-handle smoke test.
+- `make test-c-abi` — C ABI runtime/index ownership, diagnostics, strided add,
+  flat search, immutable generation activation/pin/rollback, and persistent
+  artifact contract-rejection smoke tests.

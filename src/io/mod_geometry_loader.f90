@@ -1,9 +1,10 @@
 module glamin_geometry_loader
   use iso_fortran_env, only: int32, int64
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG
-  use glamin_contracts, only: load_embedder_contract, validate_embedder_contract
+  use glamin_contracts, only: load_embedder_contract, validate_embedder_contract, &
+    validate_space_contract
   use glamin_embedder, only: EmbedderContract
-  use glamin_index_flat, only: flat_add, flat_create_handle
+  use glamin_index_flat, only: flat_add, flat_create_handle, flat_destroy_handle
   use glamin_geometry_layout, only: load_vector_layout
   use glamin_types, only: IndexHandle, VectorBlock
   use glamin_vector_io, only: free_vector_block, load_vector_block_slice
@@ -27,6 +28,7 @@ contains
     integer(int64) :: offset_bytes
     type(VectorBlock) :: vectors
     integer(int32) :: free_status
+    integer(int32) :: destroy_status
     type(EmbedderContract) :: embedder_contract
 
     status = GLAMIN_OK
@@ -55,6 +57,11 @@ contains
       return
     end if
 
+    if (present(contracts_path)) then
+      call validate_space_contract(contracts_path, space_id, dim, metric, status)
+      if (status /= GLAMIN_OK) return
+    end if
+
     call load_vector_block_slice(vectors_path, dim, count, offset_bytes, vectors, status)
     if (status /= GLAMIN_OK) then
       return
@@ -70,6 +77,9 @@ contains
     call free_vector_block(vectors, free_status)
     if (status == GLAMIN_OK .and. free_status /= GLAMIN_OK) then
       status = free_status
+    end if
+    if (status /= GLAMIN_OK) then
+      call flat_destroy_handle(index, destroy_status)
     end if
   end subroutine load_flat_from_layout
 end module glamin_geometry_loader

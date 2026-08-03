@@ -144,6 +144,9 @@ contains
     integer(int64) :: incoming
     integer(int64) :: total
     integer(int64) :: total_bytes
+    integer(int64) :: vector_index
+    integer(int64) :: destination_offset
+    integer(int64) :: source_offset
     integer(int32) :: alloc_status
     type(c_ptr) :: new_data
     type(c_ptr) :: old_data
@@ -207,9 +210,13 @@ contains
         old_src(1:int(flat_index%dim, int64) * existing)
     end if
 
-    dst(int(flat_index%dim, int64) * existing + 1_int64: &
-        int(flat_index%dim, int64) * total) = &
-      src(1:int(stride, int64) * incoming)
+    do vector_index = 1_int64, incoming
+      destination_offset = int(flat_index%dim, int64) * &
+        (existing + vector_index - 1_int64)
+      source_offset = int(stride, int64) * (vector_index - 1_int64)
+      dst(destination_offset + 1_int64:destination_offset + flat_index%dim) = &
+        src(source_offset + 1_int64:source_offset + flat_index%dim)
+    end do
 
     if (c_associated(old_data)) then
       call free_aligned(old_data, free_status)

@@ -4,11 +4,14 @@ module glamin_contracts
     c_loc, c_null_char, c_null_funptr, c_ptr
   use glamin_embedder, only: EmbedderContract, EmbedderSpec
   use glamin_errors, only: GLAMIN_OK, GLAMIN_ERR_INVALID_ARG, GLAMIN_ERR_NOT_READY
+  use glamin_metrics, only: METRIC_IP, METRIC_L2
+  use glamin_native_hash, only: hash256_hex
   implicit none
   private
 
   public :: load_embedder_contract
   public :: validate_embedder_contract
+  public :: validate_space_contract
   public :: ContractValidators
   public :: set_contract_validators
   public :: clear_contract_validators
@@ -200,6 +203,153 @@ contains
 
     call validate_signature_hook(contract, status)
   end subroutine validate_embedder_contract
+
+  subroutine validate_space_contract(path, space_id, expected_dim, expected_metric, status)
+    character(len=*), intent(in) :: path
+    character(len=*), intent(in) :: space_id
+    integer(int32), intent(in) :: expected_dim
+    integer(int32), intent(in) :: expected_metric
+    integer(int32), intent(out) :: status
+    character(len=:), allocatable :: content
+    character(len=128) :: candidate_space
+    character(len=32) :: metric_name
+    character(len=64) :: normalization
+    character(len=128) :: contract_hash
+    character(len=71) :: computed_hash
+    integer :: entry_start
+    integer :: entry_end
+    integer :: spec_start
+    integer :: spec_end
+    integer(int64) :: dimension
+    logical :: found
+
+    status = GLAMIN_OK
+    if (len_trim(space_id) == 0 .or. expected_dim <= 0_int32) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    call read_text_file(path, content, status)
+    if (status /= GLAMIN_OK) return
+    call find_space_contract(content, space_id, entry_start, entry_end, &
+      spec_start, spec_end, found)
+    if (.not. found) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    candidate_space = ''
+    call extract_string(content(spec_start:spec_end), '"space_id"', 1, &
+      candidate_space, found)
+    if (.not. found .or. trim(candidate_space) /= trim(space_id)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+    call extract_int(content(spec_start:spec_end), '"dim"', 1, dimension, found)
+    if (.not. found .or. dimension /= int(expected_dim, int64)) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    metric_name = ''
+    call extract_string(content(spec_start:spec_end), '"metric"', 1, metric_name, found)
+    if (.not. found .or. metric_from_name(metric_name) /= expected_metric) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+    normalization = ''
+    call extract_string(content(spec_start:spec_end), '"normalization"', 1, &
+      normalization, found)
+    if (.not. found .or. len_trim(normalization) == 0) then
+      status = GLAMIN_ERR_INVALID_ARG
+      return
+    end if
+
+    contract_hash = ''
+    call extract_string(content(entry_start:entry_end), '"contract_hash"', 1, &
+      contract_hash, found)
+    computed_hash = hash256_hex(content(spec_start:spec_end))
+    if (.not. found .or. trim(contract_hash) /= trim(computed_hash)) then
+      status = GLAMIN_ERR_INVALID_ARG
+    end if
+  end subroutine validate_space_contract
+
+  subroutine find_space_contract(content, space_id, entry_start, entry_end, &
+      spec_start, spec_end, found)
+    character(len=*), intent(in) :: content
+    character(len=*), intent(in) :: space_id
+    integer, intent(out) :: entry_start
+    integer, intent(out) :: entry_end
+    integer, intent(out) :: spec_start
+    integer, intent(out) :: spec_end
+    logical, intent(out) :: found
+    character(len=128) :: candidate_space
+    integer :: array_offset
+    integer :: array_start
+    integer :: candidate_spec_start
+    integer :: candidate_spec_end
+    integer :: depth
+    integer :: idx
+    logical :: candidate_found
+
+    entry_start = 0
+    entry_end = 0
+    spec_start = 0
+    spec_end = 0
+    found = .false.
+    array_start = index(content, '"spaces"')
+    if (array_start == 0) return
+    array_offset = index(content(array_start:), '[')
+    if (array_offset == 0) return
+    array_start = array_start + array_offset - 1
+
+    depth = 0
+    do idx = array_start + 1, len(content)
+      select case (content(idx:idx))
+      case ('{')
+        if (depth == 0) entry_start = idx
+        depth = depth + 1
+      case ('}')
+        if (depth > 0) depth = depth - 1
+        if (depth == 0 .and. entry_start > 0) then
+          entry_end = idx
+          call find_object_bounds(content(entry_start:entry_end), '"spec"', &
+            candidate_spec_start, candidate_spec_end, candidate_found)
+          if (candidate_found) then
+            candidate_spec_start = entry_start + candidate_spec_start - 1
+            candidate_spec_end = entry_start + candidate_spec_end - 1
+            candidate_space = ''
+            call extract_string(content(candidate_spec_start:candidate_spec_end), &
+              '"space_id"', 1, candidate_space, candidate_found)
+            if (candidate_found .and. trim(candidate_space) == trim(space_id)) then
+              spec_start = candidate_spec_start
+              spec_end = candidate_spec_end
+              found = .true.
+              return
+            end if
+          end if
+          entry_start = 0
+          entry_end = 0
+        end if
+      case (']')
+        if (depth == 0) return
+      case default
+      end select
+    end do
+  end subroutine find_space_contract
+
+  pure integer(int32) function metric_from_name(name) result(metric)
+    character(len=*), intent(in) :: name
+
+    select case (trim(name))
+    case ('l2')
+      metric = METRIC_L2
+    case ('ip', 'inner_product')
+      metric = METRIC_IP
+    case default
+      metric = -1_int32
+    end select
+  end function metric_from_name
 
   subroutine read_text_file(path, content, status)
     character(len=*), intent(in) :: path
