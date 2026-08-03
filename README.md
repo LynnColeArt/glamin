@@ -416,3 +416,10 @@ See [STYLE_GUIDE.md](STYLE_GUIDE.md) for coding conventions.
 > If you reference **Glamin** in research notes, talks, or derivative work,
 > please cite the project repository and attribute the author via ORCID:
 > **ORCID:** <https://orcid.org/0009-0004-0084-178X>
+
+---
+
+## License
+
+Glamin is licensed under the [Apache License 2.0](LICENSE). You may use,
+modify, and distribute it under the terms of that license.
